@@ -1,0 +1,12 @@
+*.aux.xml
+*.o
+*output*
+
+sciddicaTserial.lib
+sciddicatSerial.exp
+sciddicaTserial.exe
+
+tessina_output_serial
+tessina_output_serial.qgis
+
+data/
