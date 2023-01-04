@@ -40,7 +40,7 @@ run_omp:
 
 # esegue la simulazione seriale   && powershell -command "rm $(OUT_SERIAL)"
 run:
-	$(EXEC_SERIAL).exe $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) && powershell -command "certutil -hashfile $(OUT_SERIAL)l MD5" && powershell -command "Get-Content ./hash.txt" && powershell -command "Get-Content $(HDR), $(OUT_SERIAL) | Set-Content $(OUT_SERIAL).qgis"
+	$(EXEC_SERIAL).exe $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) && powershell -command "certutil -hashfile $(OUT_SERIAL) MD5" && powershell -command "Get-Content ./hash.txt" && powershell -command "Get-Content $(HDR), $(OUT_SERIAL) | Set-Content $(OUT_SERIAL).qgis"
 
 # elimina l'eseguibile, file oggetto e file di output
 clean:

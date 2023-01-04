@@ -131,9 +131,8 @@ bool saveGrid2Dr(double *M, int rows, int columns, char *path)
 double* addLayer2D(int rows, int columns)
 {
   double *tmp;
-  // cudaError_t error = 
-  cudaMallocManaged(&tmp, sizeof(double) * rows * columns);
-  // checkReturnedError(error, __LINE__, "Error allocating memory");
+  cudaError_t error = cudaMallocManaged((void**)&tmp, sizeof(double) * rows * columns);
+  checkReturnedError(error, __LINE__, "Error allocating memory");
   if (!tmp)
     return NULL;
   return tmp;
@@ -310,9 +309,9 @@ int main(int argc, char **argv)
   saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);// Save Sh to file
 
   printf("Releasing memory...\n");
-  delete[] Sz;
-  delete[] Sh;
-  delete[] Sf;
+  cudaFree(Sz);
+  cudaFree(Sh);
+  cudaFree(Sf);
 
   return 0;
 }
