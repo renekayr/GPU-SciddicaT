@@ -33,7 +33,7 @@ default:all
 all:
 #	$(CPPC) sciddicaT.cpp -o $(EXEC) -fopenmp -O3
 # SUPPRESS: warning #2464-D: conversion from a string literal to "char *" is deprecated
-	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3 -diag-suppress 2464
+	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3 -Xcudafe --diag_suppress=2464
 
 # esegue la simulazione OpenMP
 run_omp:
@@ -41,7 +41,7 @@ run_omp:
 
 # esegue la simulazione seriale 
 run:
-	./$(EXEC_SERIAL) $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) &&  md5sum $(OUT_SERIAL) && cat ./hash.txt ; echo && cat $(HDR) $(OUT_SERIAL) > $(OUT_SERIAL).qgis && rm $(OUT_SERIAL)
+	./$(EXEC_SERIAL) $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) &&  md5sum $(OUT_SERIAL) && cat $(HDR) $(OUT_SERIAL) > $(OUT_SERIAL).qgis && rm $(OUT_SERIAL)
 
 # elimina l'eseguibile, file oggetto e file di output
 clean:
