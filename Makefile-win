@@ -32,7 +32,8 @@ default:all
 # compila le versioni seriale e OpenMP
 all:
 #    $(CPPC) sciddicaT.cpp -o $(EXEC) -fopenmp -O3
-	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3
+# SUPPRESS: warning #2464-D: conversion from a string literal to "char *" is deprecated
+	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3 -diag-suppress 2464
 
 # esegue la simulazione OpenMP
 run_omp:
@@ -40,7 +41,7 @@ run_omp:
 
 # esegue la simulazione seriale   && powershell -command "rm $(OUT_SERIAL)"
 run:
-	$(EXEC_SERIAL).exe $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) && powershell -command "certutil -hashfile $(OUT_SERIAL) MD5" && powershell -command "Get-Content ./hash.txt" && powershell -command "Get-Content $(HDR), $(OUT_SERIAL) | Set-Content $(OUT_SERIAL).qgis"
+	$(EXEC_SERIAL).exe $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) && powershell -command "certutil -hashfile $(OUT_SERIAL) MD5" && powershell -command "Get-Content ./hash-win.txt" && powershell -command "Get-Content $(HDR), $(OUT_SERIAL) | Set-Content $(OUT_SERIAL).qgis"
 
 # elimina l'eseguibile, file oggetto e file di output
 clean:
