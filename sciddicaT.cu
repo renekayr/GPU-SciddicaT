@@ -141,6 +141,24 @@ void sciddicaTResetFlows(int i, int j, int r, int c, double nodata, double* Sf)
   BUF_SET(Sf, r, c, 3, i, j, 0.0);
 }
 
+__global__ void sciddicaTResetFlowsKernel(int r, int c, double nodata, double* Sf)
+{
+  int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
+  int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
+  int col_stride = blockDim.x * gridDim.x;
+  int row_stride = blockDim.y * gridDim.y;
+  for (int row = row_idx + 1; row < r - 1; row += row_stride) {
+    for (int col = col_idx + 1; col < c - 1; col += col_stride) {
+      if(row_idx > 0 && row_idx < r - 1 && col_idx > 0 && col_idx < c - 1) {
+        BUF_SET(Sf, r, c, 0, row_idx, col_idx, 0.0);
+        BUF_SET(Sf, r, c, 1, row_idx, col_idx, 0.0);
+        BUF_SET(Sf, r, c, 2, row_idx, col_idx, 0.0);
+        BUF_SET(Sf, r, c, 3, row_idx, col_idx, 0.0);
+      }
+    }
+  }
+}
+
 void sciddicaTFlowsComputation(int i, int j, int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
 {
   bool eliminated_cells[5] = {false, false, false, false, false};
@@ -197,6 +215,70 @@ void sciddicaTFlowsComputation(int i, int j, int r, int c, double nodata, int* X
   if (!eliminated_cells[4]) BUF_SET(Sf, r, c, 3, i, j, (average - u[4]) * p_r);
 }
 
+__global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
+{
+  int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
+  int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
+  int col_stride = blockDim.x * gridDim.x;
+  int row_stride = blockDim.y * gridDim.y;
+  bool eliminated_cells[5] = {false, false, false, false, false};
+  bool again;
+  int cells_count;
+  double average;
+  double m;
+  double u[5];
+  int n;
+  double z, h;
+
+  for (int row = row_idx + 1; row < r - 1; row += row_stride) {
+    for (int col = col_idx + 1; col < c - 1; col += col_stride) {
+      m = GET(Sh, c, row, col) - p_epsilon;
+      u[0] = GET(Sz, c, row, col) + p_epsilon;
+      z = GET(Sz, c, row + Xi[1], col + Xj[1]);
+      h = GET(Sh, c, row + Xi[1], col + Xj[1]);
+      u[1] = z + h;                                         
+      z = GET(Sz, c, row + Xi[2], col + Xj[2]);
+      h = GET(Sh, c, row + Xi[2], col + Xj[2]);
+      u[2] = z + h;                                         
+      z = GET(Sz, c, row + Xi[3], col + Xj[3]);
+      h = GET(Sh, c, row + Xi[3], col + Xj[3]);
+      u[3] = z + h;                                         
+      z = GET(Sz, c, row + Xi[4], col + Xj[4]);
+      h = GET(Sh, c, row + Xi[4], col + Xj[4]);
+      u[4] = z + h;
+
+      do
+      {
+        again = false;
+        average = m;
+        cells_count = 0;
+
+        for (n = 0; n < 5; n++)
+          if (!eliminated_cells[n])
+          {
+            average += u[n];
+            cells_count++;
+          }
+
+        if (cells_count != 0)
+          average /= cells_count;
+
+        for (n = 0; n < 5; n++)
+          if ((average <= u[n]) && (!eliminated_cells[n]))
+          {
+            eliminated_cells[n] = true;
+            again = true;
+          }
+      } while (again);
+
+      if (!eliminated_cells[1]) BUF_SET(Sf, r, c, 0, row, col, (average - u[1]) * p_r);
+      if (!eliminated_cells[2]) BUF_SET(Sf, r, c, 1, row, col, (average - u[2]) * p_r);
+      if (!eliminated_cells[3]) BUF_SET(Sf, r, c, 2, row, col, (average - u[3]) * p_r);
+      if (!eliminated_cells[4]) BUF_SET(Sf, r, c, 3, row, col, (average - u[4]) * p_r);
+    }
+  }
+}
+
 void sciddicaTWidthUpdate(int i, int j, int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
 {
   double h_next;
@@ -207,6 +289,27 @@ void sciddicaTWidthUpdate(int i, int j, int r, int c, double nodata, int* Xi, in
   h_next += BUF_GET(Sf, r, c, 0, i+Xi[4], j+Xj[4]) - BUF_GET(Sf, r, c, 3, i, j);
 
   SET(Sh, c, i, j, h_next);
+}
+
+__global__ void sciddicaTWidthUpdateKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
+{
+  int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
+  int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
+  int col_stride = blockDim.x * gridDim.x;
+  int row_stride = blockDim.y * gridDim.y;
+  double h_next;
+
+  for (int row = row_idx + 1; row < r - 1; row += row_stride) {
+    for (int col = col_idx + 1; col < c - 1; col += col_stride) {
+      h_next = GET(Sh, c, row, col);
+      h_next += BUF_GET(Sf, r, c, 3, row+Xi[1], col+Xj[1]) - BUF_GET(Sf, r, c, 0, row, col);
+      h_next += BUF_GET(Sf, r, c, 2, row+Xi[2], col+Xj[2]) - BUF_GET(Sf, r, c, 1, row, col);
+      h_next += BUF_GET(Sf, r, c, 1, row+Xi[3], col+Xj[3]) - BUF_GET(Sf, r, c, 2, row, col);
+      h_next += BUF_GET(Sf, r, c, 0, row+Xi[4], col+Xj[4]) - BUF_GET(Sf, r, c, 3, row, col);
+
+      SET(Sh, c, row, col, h_next);
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -262,24 +365,38 @@ int main(int argc, char **argv)
   printf("Initializing...\n");
   sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
   checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
-  cudaDeviceSynchronize();
+  checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTSimulationInitKernel");
 
+  printf("Running the simulation for %d steps...\n", steps);
   util::Timer cl_timer;
   for (int s = 0; s < steps; ++s) {
+    printf("step %d\n", s);
 #pragma omp parallel for
     for (int i = i_start; i < i_end; ++i)
       for (int j = j_start; j < j_end; ++j)
         sciddicaTResetFlows(i, j, r, c, nodata, Sf);
+
+    // sciddicaTResetFlowsKernel<<<grid_size, block_size>>>(r, c, nodata, Sf);
+    // checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
+    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTResetFlowsKernel");
 
 #pragma omp parallel for
     for (int i = i_start; i < i_end; ++i)
       for (int j = j_start; j < j_end; ++j)
         sciddicaTFlowsComputation(i, j, r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
 
+    // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>( r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+    // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
+    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
+
 #pragma omp parallel for
     for (int i = i_start; i < i_end; ++i)
       for (int j = j_start; j < j_end; ++j)
         sciddicaTWidthUpdate(i, j, r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+    
+    // sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+    // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
+    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
   }
   double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
   printf("Elapsed time: %lf [s]\n", cl_time);
