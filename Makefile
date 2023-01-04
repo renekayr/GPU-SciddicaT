@@ -32,7 +32,8 @@ default:all
 # compila le versioni seriale e OpenMP
 all:
 #	$(CPPC) sciddicaT.cpp -o $(EXEC) -fopenmp -O3
-	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3
+# SUPPRESS: warning #2464-D: conversion from a string literal to "char *" is deprecated
+	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3 -diag-suppress 2464
 
 # esegue la simulazione OpenMP
 run_omp:
