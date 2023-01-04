@@ -155,8 +155,8 @@ void sciddicaTSimulationInit(int i, int j, int r, int c, double* Sz, double* Sh)
 
 __global__ void sciddicaTSimulationInitKernel(int r, int c, double* Sz, double* Sh)
 {
-  int i = threadIdx.x + blockIdx.x * blockDim.x;
-  int j = threadIdx.y + blockIdx.y * blockDim.y;
+  int i = threadIdx.x + blockIdx.x * blockDim.x + 1;
+  int j = threadIdx.y + blockIdx.y * blockDim.y + 1;
   double z, h;
 
   if(i < r && j < c) {
@@ -284,24 +284,27 @@ int main(int argc, char **argv)
   //
   //
 
+  printf("Allocating memory...\n");
   Sz = addLayer2D(r, c);                 // Allocate Sz substate grid
   Sh = addLayer2D(r, c);                 // Allocate Sh substate grid
   Sf = addLayer2D(ADJACENT_CELLS* r, c); // Allocate Sf substates grid, having one layer for each adjacent cell
 
+  printf("Loading data from file...\n");
   loadGrid2D(Sz, r, c, argv[DEM_PATH_ID]);   // Load Sz from file
   loadGrid2D(Sh, r, c, argv[SOURCE_PATH_ID]);// Load Sh from file
 
-    long n = (i_end - 1) * (j_end - 1);
-    int dim_x = 4;
-    int dim_y = 4;
-    dim3 block_size(dim_x, dim_y, 1);
-    dim3 grid_size(ceil(n / dim_x), ceil(n / dim_y), 1);
+  long n = (i_end - 1) * (j_end - 1);
+  int dim_x = 8;
+  int dim_y = 8;
+  dim3 block_size(dim_x, dim_y, 1);
+  dim3 grid_size(ceil(n / dim_x), ceil(n / dim_y), 1);
 
-#pragma omp parallel for
-    // for (int i = i_start; i < i_end; ++i)
-    //   for (int j = j_start; j < j_end; ++j)
-        // sciddicaTSimulationInit(i, j, r, c, Sz, Sh);
-    sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
+  printf("Initializing...\n");
+  // for (int i = i_start; i < i_end; ++i)
+  //   for (int j = j_start; j < j_end; ++j)
+      // sciddicaTSimulationInit(i, j, r, c, Sz, Sh);
+  sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
+  checkError(__LINE__);
 
   printf("Starting simulation...\n");
   util::Timer cl_timer;
