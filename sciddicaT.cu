@@ -29,9 +29,6 @@
 #define BUF_SET(M, rows, columns, n, i, j, value) ( (M)[( ((n)*(rows)*(columns)) + ((i)*(columns)) + (j) )] = (value) )
 #define BUF_GET(M, rows, columns, n, i, j) ( M[( ((n)*(rows)*(columns)) + ((i)*(columns)) + (j) )] )
 
-__constant__ int Xi[] = {0, -1,  0,  0,  1};  // Xj: von Neuman neighborhood row coordinates
-__constant__ int Xj[] = {0,  0, -1,  1,  0};  // Xj: von Neuman neighborhood col coordinates
-
 // ----------------------------------------------------------------------------
 // I/O functions
 // ----------------------------------------------------------------------------
@@ -152,12 +149,12 @@ __global__ void sciddicaTResetFlowsKernel(int r, int c, double nodata, double* S
   int row_stride = blockDim.y * gridDim.y;
   for (int row = row_idx + 1; row < r - 1; row += row_stride) {
     for (int col = col_idx + 1; col < c - 1; col += col_stride) {
-      // if(row_idx > 0 && row_idx < r - 1 && col_idx > 0 && col_idx < c - 1) {
-        BUF_SET(Sf, r, c, 0, row, col, 0.0);
-        BUF_SET(Sf, r, c, 1, row, col, 0.0);
-        BUF_SET(Sf, r, c, 2, row, col, 0.0);
-        BUF_SET(Sf, r, c, 3, row, col, 0.0);
-      // }
+      if(row_idx > 0 && row_idx < r - 1 && col_idx > 0 && col_idx < c - 1) {
+        BUF_SET(Sf, r, c, 0, row_idx, col_idx, 0.0);
+        BUF_SET(Sf, r, c, 1, row_idx, col_idx, 0.0);
+        BUF_SET(Sf, r, c, 2, row_idx, col_idx, 0.0);
+        BUF_SET(Sf, r, c, 3, row_idx, col_idx, 0.0);
+      }
     }
   }
 }
@@ -218,7 +215,7 @@ void sciddicaTFlowsComputation(int i, int j, int r, int c, double nodata, int* X
   if (!eliminated_cells[4]) BUF_SET(Sf, r, c, 3, i, j, (average - u[4]) * p_r);
 }
 
-__global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
+__global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
 {
   int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
   int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
@@ -239,13 +236,13 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, dou
       u[0] = GET(Sz, c, row, col) + p_epsilon;
       z = GET(Sz, c, row + Xi[1], col + Xj[1]);
       h = GET(Sh, c, row + Xi[1], col + Xj[1]);
-      u[1] = z + h;
+      u[1] = z + h;                                         
       z = GET(Sz, c, row + Xi[2], col + Xj[2]);
       h = GET(Sh, c, row + Xi[2], col + Xj[2]);
-      u[2] = z + h;
+      u[2] = z + h;                                         
       z = GET(Sz, c, row + Xi[3], col + Xj[3]);
       h = GET(Sh, c, row + Xi[3], col + Xj[3]);
-      u[3] = z + h;
+      u[3] = z + h;                                         
       z = GET(Sz, c, row + Xi[4], col + Xj[4]);
       h = GET(Sh, c, row + Xi[4], col + Xj[4]);
       u[4] = z + h;
@@ -256,17 +253,17 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, dou
         average = m;
         cells_count = 0;
 
-        for (n = 0; n < 5; ++n)
+        for (n = 0; n < 5; n++)
           if (!eliminated_cells[n])
           {
             average += u[n];
-            ++cells_count;
+            cells_count++;
           }
 
         if (cells_count != 0)
           average /= cells_count;
 
-        for (n = 0; n < 5; ++n)
+        for (n = 0; n < 5; n++)
           if ((average <= u[n]) && (!eliminated_cells[n]))
           {
             eliminated_cells[n] = true;
@@ -278,8 +275,8 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, dou
       if (!eliminated_cells[2]) BUF_SET(Sf, r, c, 1, row, col, (average - u[2]) * p_r);
       if (!eliminated_cells[3]) BUF_SET(Sf, r, c, 2, row, col, (average - u[3]) * p_r);
       if (!eliminated_cells[4]) BUF_SET(Sf, r, c, 3, row, col, (average - u[4]) * p_r);
-      }
     }
+  }
 }
 
 void sciddicaTWidthUpdate(int i, int j, int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
@@ -294,7 +291,7 @@ void sciddicaTWidthUpdate(int i, int j, int r, int c, double nodata, int* Xi, in
   SET(Sh, c, i, j, h_next);
 }
 
-__global__ void sciddicaTWidthUpdateKernel(int r, int c, double nodata, double *Sz, double *Sh, double *Sf)
+__global__ void sciddicaTWidthUpdateKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
 {
   int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
   int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
@@ -331,6 +328,8 @@ int main(int argc, char **argv)
   double *Sz;                    // Sz: substate (grid) containing the cells' altitude a.s.l.
   double *Sh;                    // Sh: substate (grid) containing the cells' flow thickness
   double *Sf;                    // Sf: 4 substates containing the flows towards the 4 neighs
+  int Xi[] = {0, -1,  0,  0,  1};// Xj: von Neuman neighborhood row coordinates (see below)
+  int Xj[] = {0,  0, -1,  1,  0};// Xj: von Neuman neighborhood col coordinates (see below)
   double p_r = P_R;              // p_r: minimization algorithm outflows dumping factor
   double p_epsilon = P_EPSILON;  // p_epsilon: frictional parameter threshold
   int steps = atoi(argv[STEPS_ID]); //steps: simulation steps
@@ -345,6 +344,7 @@ int main(int argc, char **argv)
   //               |0:1:(-1, 0)|
   //   |1:2:( 0,-1)| :0:( 0, 0)|2:3:( 0, 1)|
   //               |3:4:( 1, 0)|
+  //
   //
 
   printf("Allocating memory...\n");
@@ -385,7 +385,7 @@ int main(int argc, char **argv)
       for (int j = j_start; j < j_end; ++j)
         sciddicaTFlowsComputation(i, j, r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
 
-    // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>(r, c, nodata, Sz, Sh, Sf, p_r, p_epsilon);
+    // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>( r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
     // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
@@ -394,7 +394,7 @@ int main(int argc, char **argv)
       for (int j = j_start; j < j_end; ++j)
         sciddicaTWidthUpdate(i, j, r, c, nodata, Xi, Xj, Sz, Sh, Sf);
     
-    // sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Sz, Sh, Sf);
+    // sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
     // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
   }
