@@ -4,16 +4,16 @@ ifndef CPPC
 endif
 
 ifdef TEST
-	HDR=../data/test_header.txt
-	DEM=../data/test_dem.txt
-	SRC=../data/test_source.txt
+	HDR=./data/test_header.txt
+	DEM=./data/test_dem.txt
+	SRC=./data/test_source.txt
 	OUT=./test_output_OpenMP
 	OUT_SERIAL=./test_output_serial
 	STEPS=2
 else
-	HDR=../data/tessina_header.txt
-	DEM=../data/tessina_dem.txt
-	SRC=../data/tessina_source.txt
+	HDR=./data/tessina_header.txt
+	DEM=./data/tessina_dem.txt
+	SRC=./data/tessina_source.txt
 	OUT=./tessina_output_OpenMP
 	OUT_SERIAL=./tessina_output_serial
 	STEPS=4000
@@ -31,8 +31,8 @@ default:all
 
 # compila le versioni seriale e OpenMP
 all:
-	$(CPPC) sciddicaT.cpp -o $(EXEC) -fopenmp -O3
-	$(CPPC) sciddicaT.cpp -o $(EXEC_SERIAL) -O3
+#	$(CPPC) sciddicaT.cpp -o $(EXEC) -fopenmp -O3
+	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3
 
 # esegue la simulazione OpenMP
 run_omp:
