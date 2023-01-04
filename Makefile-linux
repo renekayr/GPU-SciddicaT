@@ -1,6 +1,6 @@
 # definisce la macro CPPC
 ifndef CPPC
-	CPPC=g++
+	CPPC=nvcc
 endif
 
 ifdef TEST
