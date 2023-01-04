@@ -9,6 +9,7 @@ ifdef TEST
 	SRC=./data/test_source.txt
 	OUT=./test_output_OpenMP
 	OUT_SERIAL=./test_output_serial
+	EXPECTED_HASH=./hash.txt
 	STEPS=2
 else
 	HDR=./data/tessina_header.txt
@@ -16,6 +17,7 @@ else
 	SRC=./data/tessina_source.txt
 	OUT=./tessina_output_OpenMP
 	OUT_SERIAL=./tessina_output_serial
+	EXPECTED_HASH=./hash.txt
 	STEPS=4000
 endif
 
@@ -40,7 +42,7 @@ run_omp:
 
 # esegue la simulazione seriale 
 run:
-	./$(EXEC_SERIAL) $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) &&  md5sum $(OUT_SERIAL) && cat $(HDR) $(OUT_SERIAL) > $(OUT_SERIAL).qgis && rm $(OUT_SERIAL)
+	./$(EXEC_SERIAL) $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) &&  md5sum $(OUT_SERIAL) && cat $(EXPECTED_HASH) && cat $(HDR) $(OUT_SERIAL) > $(OUT_SERIAL).qgis && rm $(OUT_SERIAL)
 
 # elimina l'eseguibile, file oggetto e file di output
 clean:
