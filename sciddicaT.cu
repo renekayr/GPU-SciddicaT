@@ -60,8 +60,8 @@ bool loadGrid2D(double *M, int rows, int columns, char *path)
   }
 
   char str[STRLEN];
-  for (int i = 0; i < rows; i++)
-    for (int j = 0; j < columns; j++)
+  for (int i = 0; i < rows; ++i)
+    for (int j = 0; j < columns; ++j)
     {
       fscanf(f, "%s", str);
       SET(M, columns, i, j, atof(str));
@@ -92,8 +92,8 @@ bool loadGrid2D(double *M, int rows, int columns, char *path)
 //   }
 
 //   char str[STRLEN];
-//   for (int i = 0; i < rows; i++)
-//     for (int j = 0; j < columns; j++)
+//   for (int i = 0; i < rows; ++i)
+//     for (int j = 0; j < columns; ++j)
 //     {
 //       fscanf(f, "%s", str);
 //       SET(M, columns, i, j, atof(str));
@@ -113,9 +113,9 @@ bool saveGrid2Dr(double *M, int rows, int columns, char *path)
     return false;
 
   char str[STRLEN];
-  for (int i = 0; i < rows; i++)
+  for (int i = 0; i < rows; ++i)
   {
-    for (int j = 0; j < columns; j++)
+    for (int j = 0; j < columns; ++j)
     {
       sprintf(str, "%f ", GET(M, columns, i, j));
       fprintf(f, "%s ", str);
@@ -150,6 +150,23 @@ void sciddicaTSimulationInit(int i, int j, int r, int c, double* Sz, double* Sh)
   {
     z = GET(Sz, c, i, j);
     SET(Sz, c, i, j, z - h);
+  }
+}
+
+__global__ void sciddicaTSimulationInitKernel(int r, int c, double* Sz, double* Sh)
+{
+  int i = threadIdx.x + blockIdx.x * blockDim.x;
+  int j = threadIdx.y + blockIdx.y * blockDim.y;
+  double z, h;
+
+  if(i < r && j < c) {
+    h = GET(Sh, c, i, j);
+
+    if (h > 0.0)
+    {
+      z = GET(Sz, c, i, j);
+      SET(Sz, c, i, j, z - h);
+    }
   }
 }
 
@@ -267,46 +284,48 @@ int main(int argc, char **argv)
   //
   //
 
-  Sz = addLayer2D(r, c);                 // Allocates the Sz substate grid
-  Sh = addLayer2D(r, c);                 // Allocates the Sh substate grid
-  Sf = addLayer2D(ADJACENT_CELLS* r, c); // Allocates the Sf substates grid, 
-                                         //   having one layer for each adjacent cell
+  Sz = addLayer2D(r, c);                 // Allocate Sz substate grid
+  Sh = addLayer2D(r, c);                 // Allocate Sh substate grid
+  Sf = addLayer2D(ADJACENT_CELLS* r, c); // Allocate Sf substates grid, having one layer for each adjacent cell
 
   loadGrid2D(Sz, r, c, argv[DEM_PATH_ID]);   // Load Sz from file
   loadGrid2D(Sh, r, c, argv[SOURCE_PATH_ID]);// Load Sh from file
 
-  // Apply the init kernel (elementary process) to the whole domain grid (cellular space)
-#pragma omp parallel for
-    for (int i = i_start; i < i_end; i++)
-      for (int j = j_start; j < j_end; j++)
-        sciddicaTSimulationInit(i, j, r, c, Sz, Sh);
+    long n = (i_end - 1) * (j_end - 1);
+    int dim_x = 4;
+    int dim_y = 4;
+    dim3 block_size(dim_x, dim_y, 1);
+    dim3 grid_size(ceil(n / dim_x), ceil(n / dim_y), 1);
 
+#pragma omp parallel for
+    // for (int i = i_start; i < i_end; ++i)
+    //   for (int j = j_start; j < j_end; ++j)
+        // sciddicaTSimulationInit(i, j, r, c, Sz, Sh);
+    sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
+
+  printf("Starting simulation...\n");
   util::Timer cl_timer;
-  // simulation loop
   for (int s = 0; s < steps; ++s)
   {
-  // Apply the resetFlow kernel to the whole domain
 #pragma omp parallel for
-    for (int i = i_start; i < i_end; i++)
-      for (int j = j_start; j < j_end; j++)
+    for (int i = i_start; i < i_end; ++i)
+      for (int j = j_start; j < j_end; ++j)
         sciddicaTResetFlows(i, j, r, c, nodata, Sf);
 
-  // Apply the FlowComputation kernel to the whole domain
 #pragma omp parallel for
-    for (int i = i_start; i < i_end; i++)
-      for (int j = j_start; j < j_end; j++)
+    for (int i = i_start; i < i_end; ++i)
+      for (int j = j_start; j < j_end; ++j)
         sciddicaTFlowsComputation(i, j, r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
 
-  // Apply the WidthUpdate mass balance kernel to the whole domain
 #pragma omp parallel for
-    for (int i = i_start; i < i_end; i++)
-      for (int j = j_start; j < j_end; j++)
+    for (int i = i_start; i < i_end; ++i)
+      for (int j = j_start; j < j_end; ++j)
         sciddicaTWidthUpdate(i, j, r, c, nodata, Xi, Xj, Sz, Sh, Sf);
   }
   double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
   printf("Elapsed time: %lf [s]\n", cl_time);
 
-  saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);// Save Sh to file
+  saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
 
   printf("Releasing memory...\n");
   cudaFree(Sz);

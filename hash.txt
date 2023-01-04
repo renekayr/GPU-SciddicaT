@@ -1,1 +1,1 @@
-Expected Hash:  8ed78fa13180c12b4d8aeec7ce6a362a
+8ed78fa13180c12b4d8aeec7ce6a362a
