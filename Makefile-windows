@@ -21,7 +21,7 @@ endif
 
 # definisce le macro contenenti i nomei degli eseguibili
 # e il numero di thread omp per la versione parallela
-NT = 2 # numero di threads OpenMP
+NT = 4 # numero di threads OpenMP
 EXEC = sciddicaTomp
 EXEC_SERIAL = sciddicaTserial
 
@@ -31,16 +31,16 @@ default:all
 
 # compila le versioni seriale e OpenMP
 all:
-#	$(CPPC) sciddicaT.cpp -o $(EXEC) -fopenmp -O3
+#    $(CPPC) sciddicaT.cpp -o $(EXEC) -fopenmp -O3
 	$(CPPC) sciddicaT.cu -o $(EXEC_SERIAL) -O3
 
 # esegue la simulazione OpenMP
 run_omp:
 	OMP_NUM_THREADS=$(NT) ./$(EXEC) $(HDR) $(DEM) $(SRC) $(OUT) $(STEPS) &&  md5sum $(OUT) && cat $(HDR) $(OUT) > $(OUT).qgis && rm $(OUT)
 
-# esegue la simulazione seriale 
+# esegue la simulazione seriale   && powershell -command "rm $(OUT_SERIAL)"
 run:
-	./$(EXEC_SERIAL) $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) &&  md5sum $(OUT_SERIAL) && cat $(HDR) $(OUT_SERIAL) > $(OUT_SERIAL).qgis && rm $(OUT_SERIAL)
+	$(EXEC_SERIAL).exe $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS) && powershell -command "certutil -hashfile $(OUT_SERIAL)l MD5" && powershell -command "Get-Content ./hash.txt" && powershell -command "Get-Content $(HDR), $(OUT_SERIAL) | Set-Content $(OUT_SERIAL).qgis"
 
 # elimina l'eseguibile, file oggetto e file di output
 clean:
