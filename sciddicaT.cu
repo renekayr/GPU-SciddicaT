@@ -372,7 +372,11 @@ int main(int argc, char **argv)
   int dim_x = 32;
   int dim_y = 32;
   dim3 block_size(dim_x, dim_y, 1);
-  dim3 grid_size(ceil(n / dim_x), ceil(n / dim_y), 1);
+  dim3 grid_size(ceil(sqrt(n / (dim_x * dim_y))), ceil(sqrt(n / (dim_x * dim_y))), 1);
+  // printf("Problem size is %d elements\n", n);
+  // printf("Block dimensions are %d, %d, %d\n", block_size.x, block_size.y, block_size.z);
+  // printf("Grid dimensions are %d, %d, %d\n", grid_size.x, grid_size.y, grid_size.z);
+  // printf("Total grid threads are: %d\n", block_size.x * block_size.y * grid_size.x * grid_size.y);
 
   printf("Initializing...\n");
   sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
@@ -382,7 +386,7 @@ int main(int argc, char **argv)
   printf("Running the simulation for %d steps...\n", steps);
   util::Timer cl_timer;
   for (int s = 0; s < steps; ++s) {
-    printf("step %d\n", s);
+    // printf("step %d\n", s);
 #pragma omp parallel for
     for (int i = i_start; i < i_end; ++i)
       for (int j = j_start; j < j_end; ++j)
