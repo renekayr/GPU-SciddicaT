@@ -72,6 +72,38 @@ bool loadGrid2D(double *M, int rows, int columns, char *path)
   return true;
 }
 
+// bool loadGrid2D(double *M, int rows, int columns, char *path) {
+//   long n = (i_end - 1) * (j_end - 1);
+//   int dim_x = 4;
+//   int dim_y = 4;
+//   dim3 block_size(dim_x, dim_y, 1);
+//   dim3 grid_size(ceil(n / dim_x), ceil(n / dim_y), 1);
+//   loadGrid2DKernel<<<grid_size, block_size>>>(Sz, r, c, argv[DEM_PATH_ID]);   // Load Sz from file
+//   loadGrid2DKernel<<<grid_size, block_size>>>(Sh, r, c, argv[SOURCE_PATH_ID]);// Load Sh from file
+// }
+
+// __global__ bool loadGrid2DKernel(double *M, int rows, int columns, char *path)
+// {
+//   FILE *f = fopen(path, "r");
+
+//   if (!f) {
+//     printf("%s grid file not found\n", path);
+//     exit(0);
+//   }
+
+//   char str[STRLEN];
+//   for (int i = 0; i < rows; i++)
+//     for (int j = 0; j < columns; j++)
+//     {
+//       fscanf(f, "%s", str);
+//       SET(M, columns, i, j, atof(str));
+//     }
+
+//   fclose(f);
+
+//   return true;
+// }
+
 bool saveGrid2Dr(double *M, int rows, int columns, char *path)
 {
   FILE *f;
@@ -98,7 +130,9 @@ bool saveGrid2Dr(double *M, int rows, int columns, char *path)
 
 double* addLayer2D(int rows, int columns)
 {
-  double *tmp = (double *)malloc(sizeof(double) * rows * columns);
+  double *tmp;
+  cudaError_t error = cudaMallocManaged(&tmp, sizeof(double) * rows * columns);
+  checkReturnedError(error, __LINE__, "Error allocating memory");
   if (!tmp)
     return NULL;
   return tmp;
