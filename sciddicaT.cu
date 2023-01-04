@@ -149,12 +149,12 @@ __global__ void sciddicaTResetFlowsKernel(int r, int c, double nodata, double* S
   int row_stride = blockDim.y * gridDim.y;
   for (int row = row_idx + 1; row < r - 1; row += row_stride) {
     for (int col = col_idx + 1; col < c - 1; col += col_stride) {
-      if(row_idx > 0 && row_idx < r - 1 && col_idx > 0 && col_idx < c - 1) {
-        BUF_SET(Sf, r, c, 0, row_idx, col_idx, 0.0);
-        BUF_SET(Sf, r, c, 1, row_idx, col_idx, 0.0);
-        BUF_SET(Sf, r, c, 2, row_idx, col_idx, 0.0);
-        BUF_SET(Sf, r, c, 3, row_idx, col_idx, 0.0);
-      }
+      //if(row_idx > 0 && row_idx < r - 1 && col_idx > 0 && col_idx < c - 1) {
+        BUF_SET(Sf, r, c, 0, row, col, 0.0);
+        BUF_SET(Sf, r, c, 1, row, col, 0.0);
+        BUF_SET(Sf, r, c, 2, row, col, 0.0);
+        BUF_SET(Sf, r, c, 3, row, col, 0.0);
+      //}
     }
   }
 }
@@ -236,13 +236,13 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
       u[0] = GET(Sz, c, row, col) + p_epsilon;
       z = GET(Sz, c, row + Xi[1], col + Xj[1]);
       h = GET(Sh, c, row + Xi[1], col + Xj[1]);
-      u[1] = z + h;                                         
+      u[1] = z + h;
       z = GET(Sz, c, row + Xi[2], col + Xj[2]);
       h = GET(Sh, c, row + Xi[2], col + Xj[2]);
-      u[2] = z + h;                                         
+      u[2] = z + h;
       z = GET(Sz, c, row + Xi[3], col + Xj[3]);
       h = GET(Sh, c, row + Xi[3], col + Xj[3]);
-      u[3] = z + h;                                         
+      u[3] = z + h;
       z = GET(Sz, c, row + Xi[4], col + Xj[4]);
       h = GET(Sh, c, row + Xi[4], col + Xj[4]);
       u[4] = z + h;
@@ -253,17 +253,17 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
         average = m;
         cells_count = 0;
 
-        for (n = 0; n < 5; n++)
+        for (n = 0; n < 5; ++n)
           if (!eliminated_cells[n])
           {
             average += u[n];
-            cells_count++;
+            ++cells_count;
           }
 
         if (cells_count != 0)
           average /= cells_count;
 
-        for (n = 0; n < 5; n++)
+        for (n = 0; n < 5; ++n)
           if ((average <= u[n]) && (!eliminated_cells[n]))
           {
             eliminated_cells[n] = true;
@@ -328,8 +328,20 @@ int main(int argc, char **argv)
   double *Sz;                    // Sz: substate (grid) containing the cells' altitude a.s.l.
   double *Sh;                    // Sh: substate (grid) containing the cells' flow thickness
   double *Sf;                    // Sf: 4 substates containing the flows towards the 4 neighs
-  int Xi[] = {0, -1,  0,  0,  1};// Xj: von Neuman neighborhood row coordinates (see below)
-  int Xj[] = {0,  0, -1,  1,  0};// Xj: von Neuman neighborhood col coordinates (see below)
+  int* Xi;                       // Xj: von Neuman neighborhood row coordinates (see below)
+  int* Xj;                       // Xj: von Neuman neighborhood col coordinates (see below)
+  checkError(cudaMallocManaged(&Xi, sizeof(int) * 5), __LINE__, "error allocating memory for Xi");
+  Xi[0] = 0;
+  Xi[1] = -1;
+  Xi[2] = 0;
+  Xi[3] = 0;
+  Xi[4] = 1;
+  checkError(cudaMallocManaged(&Xj, sizeof(int) * 5), __LINE__, "error allocating memory for Xj");
+  Xj[0] = 0;
+  Xj[1] = 0;
+  Xj[2] = -1;
+  Xj[3] = 1;
+  Xj[4] = 0;
   double p_r = P_R;              // p_r: minimization algorithm outflows dumping factor
   double p_epsilon = P_EPSILON;  // p_epsilon: frictional parameter threshold
   int steps = atoi(argv[STEPS_ID]); //steps: simulation steps
@@ -407,6 +419,8 @@ int main(int argc, char **argv)
   checkError(cudaFree(Sz), __LINE__, "error freeing memory");
   checkError(cudaFree(Sh), __LINE__, "error freeing memory");
   checkError(cudaFree(Sf), __LINE__, "error freeing memory");
+  checkError(cudaFree(Xi), __LINE__, "error freeing memory");
+  checkError(cudaFree(Xj), __LINE__, "error freeing memory");
 
   return 0;
 }
