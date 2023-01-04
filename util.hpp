@@ -217,7 +217,7 @@ public:
 // ----------------------------------------------------------------------------
 
 // for error-handling on operations that return cudaError_t
-void checkReturnedError(cudaError_t error, int line)
+void checkError(cudaError_t error, int line)
 {
   if (error != cudaSuccess)
   {
@@ -230,7 +230,7 @@ void checkReturnedError(cudaError_t error, int line)
 // for error-handling on operations that return cudaError_t
 // overload to accept custom error messages, making it easier
 // to pinpoint errors
-void checkReturnedError(cudaError_t error, int line, char* errorMsg)
+void checkError(cudaError_t error, int line, char* errorMsg)
 {
   if (error != cudaSuccess)
   {
@@ -245,7 +245,16 @@ void checkReturnedError(cudaError_t error, int line, char* errorMsg)
 void checkError(int line)
 {
   cudaError_t error = cudaGetLastError();
-  checkReturnedError(error, line);
+  checkError(error, line);
+}
+
+// for error-handling on operations that do not return any error
+// overload to accept custom error messages, making it easier
+// to pinpoint errors
+void checkError(int line, char* errorMsg)
+{
+  cudaError_t error = cudaGetLastError();
+  checkError(error, line, errorMsg);
 }
 
 #endif // __UTIL_HDR

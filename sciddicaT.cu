@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
 #include "util.hpp"
 
 // ----------------------------------------------------------------------------
@@ -31,11 +32,11 @@
 // ----------------------------------------------------------------------------
 // I/O functions
 // ----------------------------------------------------------------------------
-void readHeaderInfo(char* path, int &nrows, int &ncols, /*double &xllcorner, double &yllcorner, double &cellsize,*/ double &nodata)
+void readHeaderInfo(char* path, int &nrows, int &ncols, double &nodata)
 {
   FILE* f;
   
-  if ( (f = fopen(path,"r") ) == 0){
+  if ((f = fopen(path, "r")) == 0) {
     printf("%s configuration header file not found\n", path);
     exit(0);
   }
@@ -72,38 +73,6 @@ bool loadGrid2D(double *M, int rows, int columns, char *path)
   return true;
 }
 
-// bool loadGrid2D(double *M, int rows, int columns, char *path) {
-//   long n = (i_end - 1) * (j_end - 1);
-//   int dim_x = 4;
-//   int dim_y = 4;
-//   dim3 block_size(dim_x, dim_y, 1);
-//   dim3 grid_size(ceil(n / dim_x), ceil(n / dim_y), 1);
-//   loadGrid2DKernel<<<grid_size, block_size>>>(Sz, r, c, argv[DEM_PATH_ID]);   // Load Sz from file
-//   loadGrid2DKernel<<<grid_size, block_size>>>(Sh, r, c, argv[SOURCE_PATH_ID]);// Load Sh from file
-// }
-
-// __global__ bool loadGrid2DKernel(double *M, int rows, int columns, char *path)
-// {
-//   FILE *f = fopen(path, "r");
-
-//   if (!f) {
-//     printf("%s grid file not found\n", path);
-//     exit(0);
-//   }
-
-//   char str[STRLEN];
-//   for (int i = 0; i < rows; ++i)
-//     for (int j = 0; j < columns; ++j)
-//     {
-//       fscanf(f, "%s", str);
-//       SET(M, columns, i, j, atof(str));
-//     }
-
-//   fclose(f);
-
-//   return true;
-// }
-
 bool saveGrid2Dr(double *M, int rows, int columns, char *path)
 {
   FILE *f;
@@ -131,8 +100,8 @@ bool saveGrid2Dr(double *M, int rows, int columns, char *path)
 double* addLayer2D(int rows, int columns)
 {
   double *tmp;
-  cudaError_t error = cudaMallocManaged((void**)&tmp, sizeof(double) * rows * columns);
-  checkReturnedError(error, __LINE__, "Error allocating memory");
+  checkError(cudaMallocManaged(&tmp, sizeof(double) * rows * columns), __LINE__, "error allocating memory");
+
   if (!tmp)
     return NULL;
   return tmp;
@@ -141,31 +110,22 @@ double* addLayer2D(int rows, int columns)
 // ----------------------------------------------------------------------------
 // init kernel, called once before the simulation loop
 // ----------------------------------------------------------------------------
-void sciddicaTSimulationInit(int i, int j, int r, int c, double* Sz, double* Sh)
+__global__ void sciddicaTSimulationInitKernel(int r, int c, double *Sz, double *Sh)
 {
-  double z, h;
-  h = GET(Sh, c, i, j);
-
-  if (h > 0.0)
-  {
-    z = GET(Sz, c, i, j);
-    SET(Sz, c, i, j, z - h);
-  }
-}
-
-__global__ void sciddicaTSimulationInitKernel(int r, int c, double* Sz, double* Sh)
-{
-  int i = threadIdx.x + blockIdx.x * blockDim.x + 1;
-  int j = threadIdx.y + blockIdx.y * blockDim.y + 1;
+  int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
+  int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
+  int col_stride = blockDim.x * gridDim.x;
+  int row_stride = blockDim.y * gridDim.y;
   double z, h;
 
-  if(i < r && j < c) {
-    h = GET(Sh, c, i, j);
+  for (int row = row_idx + 1; row < r - 1; row += row_stride) {
+    for (int col = col_idx + 1; col < c - 1; col += col_stride) {
+      h = GET(Sh, c, row, col);
 
-    if (h > 0.0)
-    {
-      z = GET(Sz, c, i, j);
-      SET(Sz, c, i, j, z - h);
+      if (h > 0.0) {
+        z = GET(Sz, c, row, col);
+        SET(Sz, c, row, col, z - h);
+      }
     }
   }
 }
@@ -285,31 +245,27 @@ int main(int argc, char **argv)
   //
 
   printf("Allocating memory...\n");
-  Sz = addLayer2D(r, c);                 // Allocate Sz substate grid
-  Sh = addLayer2D(r, c);                 // Allocate Sh substate grid
-  Sf = addLayer2D(ADJACENT_CELLS* r, c); // Allocate Sf substates grid, having one layer for each adjacent cell
+  Sz = addLayer2D(r, c);                  // Allocates the Sz substate grid
+  Sh = addLayer2D(r, c);                  // Allocates the Sh substate grid
+  Sf = addLayer2D(ADJACENT_CELLS * r, c); // Allocates the Sf substates grid, having one layer for each adjacent cell
 
   printf("Loading data from file...\n");
-  loadGrid2D(Sz, r, c, argv[DEM_PATH_ID]);   // Load Sz from file
-  loadGrid2D(Sh, r, c, argv[SOURCE_PATH_ID]);// Load Sh from file
+  loadGrid2D(Sz, r, c, argv[DEM_PATH_ID]);    // Load Sz from file
+  loadGrid2D(Sh, r, c, argv[SOURCE_PATH_ID]); // Load Sh from file
 
-  long n = (i_end - 1) * (j_end - 1);
-  int dim_x = 8;
-  int dim_y = 8;
+  int n = rows * cols;
+  int dim_x = 32;
+  int dim_y = 32;
   dim3 block_size(dim_x, dim_y, 1);
   dim3 grid_size(ceil(n / dim_x), ceil(n / dim_y), 1);
 
   printf("Initializing...\n");
-  // for (int i = i_start; i < i_end; ++i)
-  //   for (int j = j_start; j < j_end; ++j)
-      // sciddicaTSimulationInit(i, j, r, c, Sz, Sh);
   sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
-  checkError(__LINE__);
+  checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
+  cudaDeviceSynchronize();
 
-  printf("Starting simulation...\n");
   util::Timer cl_timer;
-  for (int s = 0; s < steps; ++s)
-  {
+  for (int s = 0; s < steps; ++s) {
 #pragma omp parallel for
     for (int i = i_start; i < i_end; ++i)
       for (int j = j_start; j < j_end; ++j)
@@ -331,9 +287,9 @@ int main(int argc, char **argv)
   saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
 
   printf("Releasing memory...\n");
-  cudaFree(Sz);
-  cudaFree(Sh);
-  cudaFree(Sf);
+  checkError(cudaFree(Sz), __LINE__, "error freeing memory");
+  checkError(cudaFree(Sh), __LINE__, "error freeing memory");
+  checkError(cudaFree(Sf), __LINE__, "error freeing memory");
 
   return 0;
 }
