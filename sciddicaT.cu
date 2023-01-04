@@ -397,7 +397,7 @@ int main(int argc, char **argv)
       for (int j = j_start; j < j_end; ++j)
         sciddicaTFlowsComputation(i, j, r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
 
-    // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>( r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+    // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
     // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
@@ -416,11 +416,11 @@ int main(int argc, char **argv)
   saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
 
   printf("Releasing memory...\n");
-  checkError(cudaFree(Sz), __LINE__, "error freeing memory");
-  checkError(cudaFree(Sh), __LINE__, "error freeing memory");
-  checkError(cudaFree(Sf), __LINE__, "error freeing memory");
-  checkError(cudaFree(Xi), __LINE__, "error freeing memory");
-  checkError(cudaFree(Xj), __LINE__, "error freeing memory");
+  checkError(cudaFree(Sz), __LINE__, "error freeing memory for Sz");
+  checkError(cudaFree(Sh), __LINE__, "error freeing memory for Sh");
+  checkError(cudaFree(Sf), __LINE__, "error freeing memory for Sf");
+  checkError(cudaFree(Xi), __LINE__, "error freeing memory for Xi");
+  checkError(cudaFree(Xj), __LINE__, "error freeing memory for Xj");
 
   return 0;
 }
