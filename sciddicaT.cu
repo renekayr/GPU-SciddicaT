@@ -252,7 +252,7 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
 
   // Phase 1: All block threads copy values into the block's shared memory
   if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {  // TODO introduce proper indexing
-    Sz_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sz, c, row_halo, col_halo);  // threadIdx.x + threadIdx.y * blockDim.x == threadIdx.x + threadIdx.y * TILED_BLOCK_WIDTH
+    Sz_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sz, c, row_halo, col_halo);
     Sh_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sh, c, row_halo, col_halo);
   }
   else {  // populate ghost cells (outside of domain) with neutral elements w.r.t. operations performed on them
@@ -274,8 +274,8 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
     z = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
     h = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
     u[3] = z + h;
-    z = GET(Sz_ds, blockDim.x, threadIdx.y+ Xi[4], threadIdx.x + Xj[4]);
-    h = GET(Sh_ds, blockDim.x, threadIdx.y+ Xi[4], threadIdx.x + Xj[4]);
+    z = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
+    h = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
     u[4] = z + h;
 
     do
