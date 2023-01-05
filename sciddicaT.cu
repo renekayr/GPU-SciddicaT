@@ -437,7 +437,7 @@ int main(int argc, char **argv)
   printf("One double precision buffer requires %lld bytes of shared memory\n", TILED_BUFFER_SIZE * sizeof(double));
   printf("\n");
 
-  // TODO: define tile and by extension grid size individually depending on the kernel
+  // TODO define tile and by extension grid size individually depending on the kernel
   //       calculate them beforehand by querying device maxima
 
   //printf("Initializing...\n");
@@ -459,7 +459,7 @@ int main(int argc, char **argv)
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
     sciddicaTFlowsComputationHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
-    checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
+    checkError(__LINE__, "error executing sciddicaTFlowsComputationHaloKernel");
     checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
 
     sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
@@ -467,7 +467,7 @@ int main(int argc, char **argv)
     checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
 
     // sciddicaTWidthUpdateHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
-    // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
+    // checkError(__LINE__, "error executing sciddicaTWidthUpdateHaloKernel");
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
   }
   double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
