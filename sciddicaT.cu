@@ -459,16 +459,16 @@ int main(int argc, char **argv)
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
     sciddicaTFlowsComputationCachingKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
-    checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
-    checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
+    checkError(__LINE__, "error executing sciddicaTFlowsComputationCachingKernel");
+    checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationCachingKernel");
 
     sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
     checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
     checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
 
     // sciddicaTWidthUpdateCachingKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
-    // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
-    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
+    // checkError(__LINE__, "error executing sciddicaTWidthUpdateCachingKernel");
+    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateCachingKernel");
   }
   double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
   printf("Elapsed time: %lf [s]\n", cl_time);
