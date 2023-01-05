@@ -340,11 +340,11 @@ __global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int*
 
   double h_next;
   
-  __shared__ double Sf_ds[TILED_BUFFER_SIZE];
+  __shared__ double Sf_ds[TILED_BUFFER_SIZE * ADJACENT_CELLS];
 
   // Phase 1: All block threads copy values into shared memory
   if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {  // TODO introduce proper indexing
-    Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sf, c, row_halo, col_halo);
+    Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sf, c, row_halo, col_halo);  // threadIdx.x + threadIdx.y * blockDim.x == threadIdx.x + threadIdx.y * TILED_BLOCK_WIDTH
   }
   else {  // populate ghost cells (outside of domain) with neutral elements w.r.t. operations performed on them
     Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = nodata;
