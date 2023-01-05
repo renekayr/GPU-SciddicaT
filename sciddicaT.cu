@@ -231,7 +231,8 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
   }
 }
 
-__global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
+// TODO - convert this kernel to rely on L2 caching instead of using Halo cells
+__global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
 {
   int col_idx = 1 + threadIdx.x + TILE_WIDTH * blockIdx.x;
   int row_idx = 1 + threadIdx.y + TILE_WIDTH * blockIdx.y;
@@ -331,36 +332,42 @@ __global__ void sciddicaTWidthUpdateKernel(int r, int c, double nodata, int* Xi,
   }
 }
 
-__global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
+__global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
 {
-  int col_idx = 1 + threadIdx.x + TILE_WIDTH * blockIdx.x;
-  int row_idx = 1 + threadIdx.y + TILE_WIDTH * blockIdx.y;
-  long col_halo = col_idx - MASK_WIDTH/2;
-  long row_halo = row_idx - MASK_WIDTH/2;
+  int col_idx = 1 + threadIdx.x + blockDim.x * blockIdx.x;
+  int row_idx = 1 + threadIdx.y + blockDim.y * blockIdx.y;
 
   double h_next;
   
   __shared__ double Sf_ds[TILED_BUFFER_SIZE * ADJACENT_CELLS];
 
-  // Phase 1: All block threads copy values into shared memory
-  if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {  // TODO introduce proper indexing
-    Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sf, c, row_halo, col_halo);  // threadIdx.x + threadIdx.y * blockDim.x == threadIdx.x + threadIdx.y * TILED_BLOCK_WIDTH
-  }
-  else {  // populate ghost cells (outside of domain) with neutral elements w.r.t. operations performed on them
-    Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = nodata;
-  }
+  Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sf, c, row_idx, col_idx);
   __syncthreads();
 
-  // phase 2: tile threads compute outputs
-  if(threadIdx.x < TILE_WIDTH && threadIdx.y < TILE_WIDTH) {
-    h_next = GET(Sh, c, row_idx, col_idx);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 3, threadIdx.y + Xi[1], threadIdx.x + Xj[1]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 0, threadIdx.y, threadIdx.x);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 2, threadIdx.y + Xi[2], threadIdx.x + Xj[2]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 1, threadIdx.y, threadIdx.x);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 1, threadIdx.y + Xi[3], threadIdx.x + Xj[3]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 2, threadIdx.y, threadIdx.x);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 0, threadIdx.y + Xi[4], threadIdx.x + Xj[4]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 3, threadIdx.y, threadIdx.x);
+  int tile_start_x = blockIdx.x * blockDim.x;
+  int next_tile_start_x = ((blockIdx.x + 1) * blockDim.x);
+  int tile_start_y = blockIdx.y * blockDim.y;
+  int next_tile_start_y = ((blockIdx.y + 1) * blockDim.y);
 
-    SET(Sh, c, row_idx, col_idx, h_next);
+  h_next = GET(Sh, c, row_idx, col_idx);
+
+  int top = 3;
+  for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
+    int n_index_x = col_idx - (MASK_WIDTH/2) + Xj[cnt + 1];
+    int n_index_y = row_idx - (MASK_WIDTH/2) + Xi[cnt + 1];
+    if((n_index_x >= 1) && (n_index_x < c - 1) && (n_index_y >= 1) && (n_index_y < r - 1)) {
+      if((n_index_x >= tile_start_x) && (n_index_x < next_tile_start_x) && (n_index_y >= tile_start_y) && (n_index_y < next_tile_start_y)) {
+        h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, (top - cnt), threadIdx.y + Xi[cnt + 1], threadIdx.x + Xj[cnt + 1])
+                  - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y, threadIdx.x);
+      }
+      else {  // try to get a L2 cache hit (best case, otherwise global memory in DRAM has to be accessed)
+        h_next += BUF_GET(Sf, r, c, (top - cnt), n_index_y, n_index_x)
+                  - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y, threadIdx.x);
+      }
+    }
   }
+
+  SET(Sh, c, row_idx, col_idx, h_next);
 }
 
 // ----------------------------------------------------------------------------
@@ -458,7 +465,7 @@ int main(int argc, char **argv)
     // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
-    sciddicaTFlowsComputationHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+    sciddicaTFlowsComputationCachingKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
     checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
     checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
 
@@ -466,7 +473,7 @@ int main(int argc, char **argv)
     checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
     checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
 
-    // sciddicaTWidthUpdateHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+    // sciddicaTWidthUpdateCachingKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
     // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
     // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
   }
