@@ -32,7 +32,7 @@
   // This formula is derived by solving the following equation for for tile_width:
   // max_shared_memory = (mask_width + tile_width - 1)^2 * sizeof(datatype)
   // Else, an arbitrary or estimated amount that does not surpass the GPU's capacity is chosen
-#define TILE_WIDTH 6
+#define TILE_WIDTH 30
 #define TILED_BLOCK_WIDTH (TILE_WIDTH + MASK_WIDTH - 1)
 #define TILED_BUFFER_SIZE (TILED_BLOCK_WIDTH * TILED_BLOCK_WIDTH)
 
@@ -251,7 +251,7 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
   __shared__ double Sh_ds[TILED_BUFFER_SIZE];
 
   // Phase 1: All block threads copy values into the block's shared memory
-  if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {  // TODO introduce proper indexing
+  if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {
     Sz_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sz, c, row_halo, col_halo);
     Sh_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sh, c, row_halo, col_halo);
   }
@@ -263,20 +263,28 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
 
   // phase 2: Tile threads compute outputs
   if(threadIdx.x < TILE_WIDTH && threadIdx.y < TILE_WIDTH) {
-    m = GET(Sh_ds, blockDim.x, threadIdx.y, threadIdx.x) - p_epsilon;
+    m    = GET(Sh_ds, blockDim.x, threadIdx.y, threadIdx.x) - p_epsilon;
     u[0] = GET(Sz_ds, blockDim.x, threadIdx.y, threadIdx.x) + p_epsilon;
-    z = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[1], threadIdx.x + Xj[1]);
-    h = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[1], threadIdx.x + Xj[1]);
-    u[1] = z + h;
-    z = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
-    h = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
-    u[2] = z + h;
-    z = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
-    h = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
-    u[3] = z + h;
-    z = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
-    h = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
-    u[4] = z + h;
+
+    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[1], threadIdx.x + Xj[1]);
+    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[1], threadIdx.x + Xj[1]);
+    // u[1] = z + h;  // TODO - if this value is used, an illegal memory access occurs later in the kernel. Why?
+    u[1] = 0.0;  // DEBUG
+
+    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
+    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
+    // u[2] = z + h;
+    u[2] = 0.0;  // DEBUG
+
+    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
+    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
+    // u[3] = z + h;
+    u[3] = 0.0;  // DEBUG
+
+    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
+    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
+    // u[4] = z + h;
+    u[4] = 0.0;  // DEBUG
 
     do
     {
@@ -343,7 +351,7 @@ __global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int*
   __shared__ double Sf_ds[TILED_BUFFER_SIZE * ADJACENT_CELLS];
 
   // Phase 1: All block threads copy values into shared memory
-  if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {  // TODO introduce proper indexing
+  if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {
     Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sf, c, row_halo, col_halo);  // threadIdx.x + threadIdx.y * blockDim.x == threadIdx.x + threadIdx.y * TILED_BLOCK_WIDTH
   }
   else {  // populate ghost cells (outside of domain) with neutral elements w.r.t. operations performed on them
@@ -462,13 +470,13 @@ int main(int argc, char **argv)
     checkError(__LINE__, "error executing sciddicaTFlowsComputationHaloKernel");
     checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
 
-    sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
-    checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
-    checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
+    // sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+    // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
+    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
 
-    // sciddicaTWidthUpdateHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
-    // checkError(__LINE__, "error executing sciddicaTWidthUpdateHaloKernel");
-    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
+    sciddicaTWidthUpdateHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+    checkError(__LINE__, "error executing sciddicaTWidthUpdateHaloKernel");
+    checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
   }
   double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
   printf("Elapsed time: %lf [s]\n", cl_time);
