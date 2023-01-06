@@ -306,10 +306,9 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
         }
     } while (again);
 
-    if (!eliminated_cells[1]) BUF_SET(Sf, r, c, 0, row_idx, col_idx, (average - u[1]) * p_r);
-    if (!eliminated_cells[2]) BUF_SET(Sf, r, c, 1, row_idx, col_idx, (average - u[2]) * p_r);
-    if (!eliminated_cells[3]) BUF_SET(Sf, r, c, 2, row_idx, col_idx, (average - u[3]) * p_r);
-    if (!eliminated_cells[4]) BUF_SET(Sf, r, c, 3, row_idx, col_idx, (average - u[4]) * p_r);
+    for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
+      if (!eliminated_cells[cnt + 1]) BUF_SET(Sf, r, c, cnt, row_idx, col_idx, (average - u[cnt + 1]) * p_r);  // TODO check calculation results
+    }
   }
 }
 
