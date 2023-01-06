@@ -32,7 +32,7 @@
   // This formula is derived by solving the following equation for for tile_width:
   // max_shared_memory = (mask_width + tile_width - 1)^2 * sizeof(datatype)
   // Else, an arbitrary or estimated amount that does not surpass the GPU's capacity is chosen
-#define TILE_WIDTH 6
+#define TILE_WIDTH 30
 #define TILED_BLOCK_WIDTH (TILE_WIDTH + MASK_WIDTH - 1)
 #define TILED_BUFFER_SIZE (TILED_BLOCK_WIDTH * TILED_BLOCK_WIDTH)
 
