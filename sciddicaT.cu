@@ -293,10 +293,10 @@ int main(int argc, char **argv)
   dim3 block_size(dim_x, dim_y, 1);
   dim3 grid_size(ceil(sqrt(n / (dim_x * dim_y))), ceil(sqrt(n / (dim_x * dim_y))), 1);
 
-  // printf("Problem size is %d elements\n", n);
-  // printf("Block dimensions are %d, %d, %d\n", block_size.x, block_size.y, block_size.z);
-  // printf("Grid dimensions are %d, %d, %d\n", grid_size.x, grid_size.y, grid_size.z);
-  // printf("Total grid threads are: %d\n", block_size.x * block_size.y * grid_size.x * grid_size.y);
+  printf("Problem size is %d elements\n", n);
+  printf("Block dimensions are %d, %d, %d\n", block_size.x, block_size.y, block_size.z);
+  printf("Grid dimensions are %d, %d, %d\n", grid_size.x, grid_size.y, grid_size.z);
+  printf("Total grid threads are: %d\n", block_size.x * block_size.y * grid_size.x * grid_size.y);
 
   //printf("Initializing...\n");
   sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
