@@ -448,35 +448,43 @@ int main(int argc, char **argv)
   checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
   checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTSimulationInitKernel");
 
+  int loops = 100;  // TEST
   printf("Running the simulation for %d steps...\n", steps);
-  util::Timer cl_timer;
-  for (int s = 0; s < steps; ++s) {
-    // printf("step %d\n", s+1);
+  printf("... and %d times, determining the best time.\n", loops);
+  double best_time = 0.0;
+  for(int loop = 0; loop < loops; ++loop) {
+    util::Timer cl_timer;
+    for (int s = 0; s < steps; ++s) {
+      //printf("step %d\n", s+1);
 
-    sciddicaTResetFlowsKernel<<<grid_size, block_size>>>(r, c, nodata, Sf);
-    checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
-    checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTResetFlowsKernel");
+      sciddicaTResetFlowsKernel<<<grid_size, block_size>>>(r, c, nodata, Sf);
+      checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
+      checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTResetFlowsKernel");
 
-    // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
-    // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
-    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
+      // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+      // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
+      // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
-    sciddicaTFlowsComputationHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
-    checkError(__LINE__, "error executing sciddicaTFlowsComputationHaloKernel");
-    checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
+      sciddicaTFlowsComputationHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+      checkError(__LINE__, "error executing sciddicaTFlowsComputationHaloKernel");
+      checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
 
-    sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
-    checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
-    checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
+      // sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+      // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
+      // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
 
-    // sciddicaTWidthUpdateHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
-    // checkError(__LINE__, "error executing sciddicaTWidthUpdateHaloKernel");
-    // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
+      sciddicaTWidthUpdateHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+      checkError(__LINE__, "error executing sciddicaTWidthUpdateHaloKernel");
+      checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
+    }
+    double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
+    printf("[%d] ", loop);
+    printf("Elapsed time: %lf [s]\n", cl_time);
+    if(cl_time < best_time || loop == 0) {
+      best_time = cl_time;
+    }
   }
-  double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
-  printf("Elapsed time: %lf [s]\n", cl_time);
-
-  saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
+  printf("Best time: %lf [s]\n", best_time);
 
   //printf("Releasing memory...\n");
   checkError(cudaFree(Sz), __LINE__, "error deallocating memory for Sz");
