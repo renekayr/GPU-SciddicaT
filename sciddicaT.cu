@@ -29,9 +29,9 @@
 #define MASK_WIDTH 3
   // Tile size can be dynamically calculated by using tile_width = 1 - mask_width - (pow(max_shared_memory, 2) / pow(sizeof(datatype), 2))
   // max_shared_memory can be queried from the CUDA API at runtime
-  // This formula is derived by solving the following equation for for tile_width:
+  // This formula is derived by solving the following equation for tile_width:
   // max_shared_memory = (mask_width + tile_width - 1)^2 * sizeof(datatype)
-  // Else, an arbitrary or estimated amount that does not surpass the GPU's capacity is chosen
+  // Else, an arbitrary or estimated amount that does not exceed the GPU's capacity is chosen
 #define TILE_WIDTH 30
 #define TILED_BLOCK_WIDTH (TILE_WIDTH + MASK_WIDTH - 1)
 #define TILED_BUFFER_SIZE (TILED_BLOCK_WIDTH * TILED_BLOCK_WIDTH)
@@ -263,6 +263,8 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
 
   // phase 2: Tile threads compute outputs
   if(threadIdx.x < TILE_WIDTH && threadIdx.y < TILE_WIDTH) {
+    // double test;  // DEBUG
+
     m    = GET(Sh_ds, blockDim.x, threadIdx.y, threadIdx.x) - p_epsilon;
     u[0] = GET(Sz_ds, blockDim.x, threadIdx.y, threadIdx.x) + p_epsilon;
 
@@ -270,21 +272,25 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
     h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[1], threadIdx.x + Xj[1]);
     // u[1] = z + h;  // TODO - if this value is used, an illegal memory access occurs later in the kernel. Why?
     u[1] = 0.0;  // DEBUG
+    // test = z + h;  // DEBUG
 
     z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
     h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
     // u[2] = z + h;
     u[2] = 0.0;  // DEBUG
+    // test = z + h;  // DEBUG
 
     z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
     h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
     // u[3] = z + h;
     u[3] = 0.0;  // DEBUG
+    // test = z + h;  // DEBUG
 
     z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
     h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
     // u[4] = z + h;
     u[4] = 0.0;  // DEBUG
+    // test = z + h;  // DEBUG
 
     do
     {
