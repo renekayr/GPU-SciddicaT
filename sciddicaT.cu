@@ -486,6 +486,8 @@ int main(int argc, char **argv)
   }
   printf("Best time: %lf [s]\n", best_time);
 
+  saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
+
   //printf("Releasing memory...\n");
   checkError(cudaFree(Sz), __LINE__, "error deallocating memory for Sz");
   checkError(cudaFree(Sh), __LINE__, "error deallocating memory for Sh");
