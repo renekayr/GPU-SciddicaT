@@ -53,3 +53,9 @@ wipe:
 
 registers:
 	$(CPPC) sciddicaT.cu --ptxas-options=-v -o $(EXEC_SERIAL) -O3 -diag-suppress 2464
+
+roofline:
+	nvprof --log-file log_oi.csv --csv --metrics flop_count_dp --metrics flop_count_sp --metrics flop_count_hp --metrics gld_transactions --metrics gst_transactions --metrics atomic_transactions --metrics local_load_transactions --metrics local_store_transactions --metrics shared_load_transactions --metrics shared_store_transactions --metrics l2_read_transactions --metrics l2_write_transactions --metrics dram_read_transactions --metrics dram_write_transactions ./$(EXEC_SERIAL) $(HDR) $(DEM) $(SRC) $(OUT_SERIAL) $(STEPS)
+
+time:
+	nvprof --log-file log_flop.csv --csv --print-gpu-summary $(EXEC_SERIAL)
