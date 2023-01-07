@@ -233,8 +233,8 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
 
 __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
 {
-  int col_idx = 1 + threadIdx.x + TILE_WIDTH * blockIdx.x;
-  int row_idx = 1 + threadIdx.y + TILE_WIDTH * blockIdx.y;
+  int col_idx = threadIdx.x + TILE_WIDTH * blockIdx.x;
+  int row_idx = threadIdx.y + TILE_WIDTH * blockIdx.y;
   long col_halo = col_idx - MASK_WIDTH/2;
   long row_halo = row_idx - MASK_WIDTH/2;
 
@@ -251,7 +251,7 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
   __shared__ double Sh_ds[TILED_BUFFER_SIZE];
 
   // Phase 1: All block threads copy values into the block's shared memory
-  if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {
+  if((col_halo >= 0) && (col_halo < c) && (row_halo >= 0) && (row_halo < r)) {
     Sz_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sz, c, row_halo, col_halo);
     Sh_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sh, c, row_halo, col_halo);
   }
@@ -336,8 +336,8 @@ __global__ void sciddicaTWidthUpdateKernel(int r, int c, double nodata, int* Xi,
 
 __global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
 {
-  int col_idx = 1 + threadIdx.x + TILE_WIDTH * blockIdx.x;
-  int row_idx = 1 + threadIdx.y + TILE_WIDTH * blockIdx.y;
+  int col_idx = threadIdx.x + TILE_WIDTH * blockIdx.x;
+  int row_idx = threadIdx.y + TILE_WIDTH * blockIdx.y;
   long col_halo = col_idx - MASK_WIDTH/2;
   long row_halo = row_idx - MASK_WIDTH/2;
 
@@ -346,8 +346,10 @@ __global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int*
   __shared__ double Sf_ds[TILED_BUFFER_SIZE * ADJACENT_CELLS];
 
   // Phase 1: All block threads copy values into shared memory
-  if((col_halo >= 1) && (col_halo < c - 1) && (row_halo >= 1) && (row_halo < r - 1)) {
-    Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sf, c, row_halo, col_halo);  // threadIdx.x + threadIdx.y * blockDim.x == threadIdx.x + threadIdx.y * TILED_BLOCK_WIDTH
+  if((col_halo >= 0) && (col_halo < c) && (row_halo >= 0) && (row_halo < r)) {  // threadIdx.x + threadIdx.y * blockDim.x == threadIdx.x + threadIdx.y * TILED_BLOCK_WIDTH
+    for(int cnt = 0; cnt < 4; ++cnt) {
+      Sf_ds[(cnt * blockDim.x * blockDim.y) + threadIdx.x + threadIdx.y * blockDim.x] = BUF_GET(Sf, r, c, cnt, row_halo, col_halo);
+    }
   }
   else {  // populate ghost cells (outside of domain) with neutral elements w.r.t. operations performed on them
     Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = nodata;
@@ -355,12 +357,12 @@ __global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int*
   __syncthreads();
 
   // phase 2: tile threads compute outputs
-  if(threadIdx.x >= 1 && threadIdx.x < TILE_WIDTH && threadIdx.y >= 1 && threadIdx.y < TILE_WIDTH) {
+  if(threadIdx.x < TILE_WIDTH && threadIdx.y < TILE_WIDTH) {
     h_next = GET(Sh, c, row_idx, col_idx);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 3, threadIdx.y + Xi[1], threadIdx.x + Xj[1]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 0, threadIdx.y, threadIdx.x);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 2, threadIdx.y + Xi[2], threadIdx.x + Xj[2]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 1, threadIdx.y, threadIdx.x);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 1, threadIdx.y + Xi[3], threadIdx.x + Xj[3]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 2, threadIdx.y, threadIdx.x);
-    h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, 0, threadIdx.y + Xi[4], threadIdx.x + Xj[4]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, 3, threadIdx.y, threadIdx.x);
+    int top = 3;
+    for(int cnt = 0; cnt < 4; ++cnt) {
+      h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, top-cnt, threadIdx.y + Xi[cnt+1], threadIdx.x + Xj[cnt+1]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y + Xi[0], threadIdx.x + Xj[0]);
+    }
 
     SET(Sh, c, row_idx, col_idx, h_next);
   }
@@ -406,9 +408,9 @@ int main(int argc, char **argv)
   Sh = addLayer2D(r, c);                  // Allocates the Sh substate grid
   Sf = addLayer2D(ADJACENT_CELLS * r, c); // Allocates the Sf substates grid, having one layer for each adjacent cell
   checkError(cudaMallocManaged(&Xi, sizeof(int) * 5), __LINE__, "error allocating memory for Xi");
-  Xi[0] = 0; Xi[1] = -1; Xi[2] = 0;  Xi[3] = 0; Xi[4] = 1;
+  Xi[0] = 1; Xi[1] = 0; Xi[2] = 1;  Xi[3] = 1; Xi[4] = 2;
   checkError(cudaMallocManaged(&Xj, sizeof(int) * 5), __LINE__, "error allocating memory for Xj");
-  Xj[0] = 0; Xj[1] = 0;  Xj[2] = -1; Xj[3] = 1; Xj[4] = 0;
+  Xj[0] = 1; Xj[1] = 1;  Xj[2] = 0; Xj[3] = 2; Xj[4] = 1;
 
   // printf("Loading data from file...\n");
   loadGrid2D(Sz, r, c, argv[DEM_PATH_ID]);    // Load Sz from file
@@ -448,11 +450,11 @@ int main(int argc, char **argv)
   checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
   checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTSimulationInitKernel");
 
-  int loops = 100;  // TEST
+  // int loops = 100;  // TEST
   printf("Running the simulation for %d steps...\n", steps);
-  printf("... and %d times, determining the best time.\n", loops);
-  double best_time = 0.0;
-  for(int loop = 0; loop < loops; ++loop) {
+  // printf("... and %d times, determining the best time.\n", loops);
+  // double best_time = 0.0;
+  // for(int loop = 0; loop < loops; ++loop) {
     util::Timer cl_timer;
     for (int s = 0; s < steps; ++s) {
       //printf("step %d\n", s+1);
@@ -461,13 +463,13 @@ int main(int argc, char **argv)
       checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTResetFlowsKernel");
 
-      // sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
-      // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
-      // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
+      sciddicaTFlowsComputationKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+      checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
+      checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
-      sciddicaTFlowsComputationHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
-      checkError(__LINE__, "error executing sciddicaTFlowsComputationHaloKernel");
-      checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
+      // sciddicaTFlowsComputationHaloKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+      // checkError(__LINE__, "error executing sciddicaTFlowsComputationHaloKernel");
+      // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationHaloKernel");
 
       // sciddicaTWidthUpdateKernel<<<grid_size, block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
       // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
@@ -478,13 +480,13 @@ int main(int argc, char **argv)
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateHaloKernel");
     }
     double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
-    printf("[%d] ", loop);
+    // printf("[%d] ", loop);
     printf("Elapsed time: %lf [s]\n", cl_time);
-    if(cl_time < best_time || loop == 0) {
-      best_time = cl_time;
-    }
-  }
-  printf("Best time: %lf [s]\n", best_time);
+    // if(cl_time < best_time || loop == 0) {
+    //   best_time = cl_time;
+    // }
+  // }
+  // printf("Best time: %lf [s]\n", best_time);
 
   saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
 
