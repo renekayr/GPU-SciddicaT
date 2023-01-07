@@ -50,3 +50,6 @@ clean:
 # elimina file oggetto e di output
 wipe:
 	rm -f *.o *output*
+
+registers:
+	$(CPPC) sciddicaT.cu --ptxas-options=-v -o $(EXEC_SERIAL) -O3 -diag-suppress 2464
