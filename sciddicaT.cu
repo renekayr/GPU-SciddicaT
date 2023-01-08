@@ -328,14 +328,16 @@ __global__ void sciddicaTWidthUpdateKernel(int r, int c, double nodata, int* Xi,
 
 __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf)
 {
-  int col_idx = 1 + threadIdx.x + blockDim.x * blockIdx.x;
-  int row_idx = 1 + threadIdx.y + blockDim.y * blockIdx.y;
+  int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
+  int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
 
   double h_next;
   
   __shared__ double Sf_ds[TILED_BUFFER_SIZE * ADJACENT_CELLS];
 
-  Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sf, c, row_idx, col_idx);
+  for(int cnt = 0; cnt < 4; ++cnt) {
+    Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = BUF_GET(Sf, r, c, cnt, row_idx, col_idx);
+  }
   __syncthreads();
 
   int tile_start_x = blockIdx.x * blockDim.x;
@@ -348,7 +350,7 @@ __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, i
   for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
     int n_index_x = col_idx - (MASK_WIDTH/2) + Xj[cnt + 1];
     int n_index_y = row_idx - (MASK_WIDTH/2) + Xi[cnt + 1];
-    if((n_index_x >= 1) && (n_index_x < c - 1) && (n_index_y >= 1) && (n_index_y < r - 1)) {
+    if((n_index_x >= 0) && (n_index_x < c) && (n_index_y >= 0) && (n_index_y < r)) {
       if((n_index_x >= tile_start_x) && (n_index_x < next_tile_start_x) && (n_index_y >= tile_start_y) && (n_index_y < next_tile_start_y)) {
         h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, (MASK_WIDTH - cnt), threadIdx.y + Xi[cnt + 1], threadIdx.x + Xj[cnt + 1])
                   - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y, threadIdx.x);
@@ -360,7 +362,7 @@ __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, i
     }
   }
 
-  SET(Sh, c, row_idx, col_idx, h_next);  // TODO check calculation results
+  SET(Sh, c, row_idx, col_idx, h_next);
 }
 
 // ----------------------------------------------------------------------------
