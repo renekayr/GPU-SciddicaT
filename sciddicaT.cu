@@ -262,25 +262,15 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
   __syncthreads();
 
   // phase 2: Tile threads compute outputs
-  if(threadIdx.x >= 1 && threadIdx.x < TILE_WIDTH && threadIdx.y >= 1 && threadIdx.y < TILE_WIDTH) {
+  if(threadIdx.x < TILE_WIDTH && threadIdx.y < TILE_WIDTH) {
     m    = GET(Sh_ds, blockDim.x, threadIdx.y, threadIdx.x) - p_epsilon;
     u[0] = GET(Sz_ds, blockDim.x, threadIdx.y, threadIdx.x) + p_epsilon;
 
-    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[1], threadIdx.x + Xj[1]);
-    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[1], threadIdx.x + Xj[1]);
-    u[1] = z + h;
-
-    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
-    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[2], threadIdx.x + Xj[2]);
-    u[2] = z + h;
-
-    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
-    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[3], threadIdx.x + Xj[3]);
-    u[3] = z + h;
-
-    z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
-    h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[4], threadIdx.x + Xj[4]);
-    u[4] = z + h;
+    for(int cnt = 1; cnt < 5; ++cnt) {
+      z    = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[cnt], threadIdx.x + Xj[cnt]);
+      h    = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[cnt], threadIdx.x + Xj[cnt]);
+      u[cnt] = z + h;
+    }
 
     do
     {
@@ -307,7 +297,7 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
     } while (again);
 
     for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
-      if (!eliminated_cells[cnt + 1]) BUF_SET(Sf, r, c, cnt, row_idx, col_idx, (average - u[cnt + 1]) * p_r);  // TODO check calculation results
+      if (!eliminated_cells[cnt + 1]) BUF_SET(Sf, r, c, cnt, row_idx, col_idx, (average - u[cnt + 1]) * p_r);
     }
   }
 }
@@ -346,7 +336,7 @@ __global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int*
   __shared__ double Sf_ds[TILED_BUFFER_SIZE * ADJACENT_CELLS];
 
   // Phase 1: All block threads copy values into shared memory
-  if((col_halo >= 0) && (col_halo < c) && (row_halo >= 0) && (row_halo < r)) {  // threadIdx.x + threadIdx.y * blockDim.x == threadIdx.x + threadIdx.y * TILED_BLOCK_WIDTH
+  if((col_halo >= 0) && (col_halo < c) && (row_halo >= 0) && (row_halo < r)) {
     for(int cnt = 0; cnt < 4; ++cnt) {
       Sf_ds[(cnt * blockDim.x * blockDim.y) + threadIdx.x + threadIdx.y * blockDim.x] = BUF_GET(Sf, r, c, cnt, row_halo, col_halo);
     }
@@ -359,9 +349,8 @@ __global__ void sciddicaTWidthUpdateHaloKernel(int r, int c, double nodata, int*
   // phase 2: tile threads compute outputs
   if(threadIdx.x < TILE_WIDTH && threadIdx.y < TILE_WIDTH) {
     h_next = GET(Sh, c, row_idx, col_idx);
-    int top = 3;
     for(int cnt = 0; cnt < 4; ++cnt) {
-      h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, top-cnt, threadIdx.y + Xi[cnt+1], threadIdx.x + Xj[cnt+1]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y + Xi[0], threadIdx.x + Xj[0]);
+      h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, MASK_WIDTH - cnt, threadIdx.y + Xi[cnt+1], threadIdx.x + Xj[cnt+1]) - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y + Xi[0], threadIdx.x + Xj[0]);
     }
 
     SET(Sh, c, row_idx, col_idx, h_next);
@@ -441,9 +430,6 @@ int main(int argc, char **argv)
   printf("Threads only involved in output: %d\n", TILE_WIDTH * TILE_WIDTH * tiled_grid_size.x * tiled_grid_size.y * tiled_grid_size.z);
   printf("One double precision buffer requires %lld bytes of shared memory\n", TILED_BUFFER_SIZE * sizeof(double));
   printf("\n");
-
-  // TODO define tile and by extension grid size individually depending on the kernel
-  //       calculate them beforehand by querying device maxima
 
   //printf("Initializing...\n");
   sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
