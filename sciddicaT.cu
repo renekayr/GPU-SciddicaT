@@ -34,7 +34,7 @@
   // Else, an arbitrary or estimated amount that does not surpass the GPU's capacity is chosen
 #define TILE_WIDTH 30
 #define TILED_BLOCK_WIDTH (TILE_WIDTH + MASK_WIDTH - 1)
-#define TILED_BUFFER_SIZE (TILED_BLOCK_WIDTH * TILED_BLOCK_WIDTH)
+#define TILED_BUFFER_SIZE (TILE_WIDTH * TILE_WIDTH)
 
 // ----------------------------------------------------------------------------
 // Read/Write access macros linearizing single/multy layer buffer 2D indices
@@ -422,7 +422,7 @@ int main(int argc, char **argv)
   // printf("Grid dimensions are %d, %d, %d\n", grid_size.x, grid_size.y, grid_size.z);
   // printf("Total grid threads are: %d\n", block_size.x * block_size.y * grid_size.x * grid_size.y);
 
-  dim3 tiled_block_size(TILED_BLOCK_WIDTH, TILED_BLOCK_WIDTH, 1);  // == TILED_BUFFER_SIZE
+  dim3 tiled_block_size(TILE_WIDTH, TILE_WIDTH, 1);  // == TILED_BUFFER_SIZE
   dim3 tiled_grid_size(ceil(sqrt(n / (TILE_WIDTH * TILE_WIDTH))), ceil(sqrt(n / (TILE_WIDTH * TILE_WIDTH))), 1);
 
   printf("\n");
@@ -445,11 +445,11 @@ int main(int argc, char **argv)
   checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
   checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTSimulationInitKernel");
 
-  int loops = 100;  // TEST
+  // int loops = 100;  // TEST
   printf("Running the simulation for %d steps...\n", steps);
-  printf("... and %d times, determining the best time.\n", loops);
-  double best_time = 0.0;
-  for(int loop = 0; loop < loops; ++loop) {
+  // printf("... and %d times, determining the best time.\n", loops);
+  // double best_time = 0.0;
+  // for(int loop = 0; loop < loops; ++loop) {
     util::Timer cl_timer;
     for (int s = 0; s < steps; ++s) {
       //printf("step %d\n", s+1);
@@ -475,13 +475,13 @@ int main(int argc, char **argv)
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateCachingKernel");
     }
     double cl_time = static_cast<double>(cl_timer.getTimeMilliseconds()) / 1000.0;
-    printf("[%d] ", loop);
+    // printf("[%d] ", loop);
     printf("Elapsed time: %lf [s]\n", cl_time);
-    if(cl_time < best_time || loop == 0) {
-      best_time = cl_time;
-    }
-  }
-  printf("Best time: %lf [s]\n", best_time);
+    // if(cl_time < best_time || loop == 0) {
+    //   best_time = cl_time;
+    // }
+  // }
+  // printf("Best time: %lf [s]\n", best_time);
 
   saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
 
