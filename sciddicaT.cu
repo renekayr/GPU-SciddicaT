@@ -221,15 +221,15 @@ __global__ void sciddicaTFlowsComputationHaloKernel(int r, int c, double nodata,
         average = m;
         cells_count = 0;
 
-        for (n = 0; n < 5; n++)
+        for (n = 0; n < 5; ++n)
           if (!eliminated_cells[n]) {
             average += u[n];
-            cells_count++;
+            ++cells_count;
           }
 
         if (cells_count != 0) average /= cells_count;
 
-        for (n = 0; n < 5; n++) {
+        for (n = 0; n < 5; ++n) {
           if ((average <= u[n]) && (!eliminated_cells[n])) {
             eliminated_cells[n] = true;
             again = true;
