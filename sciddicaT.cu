@@ -144,10 +144,8 @@ __global__ void sciddicaTResetFlowsKernel(int r, int c, double nodata, double* S
 
   for (int row = row_idx + 1; row < r - 1; row += row_stride) {
     for (int col = col_idx + 1; col < c - 1; col += col_stride) {
-      BUF_SET(Sf, r, c, 0, row, col, 0.0);
-      BUF_SET(Sf, r, c, 1, row, col, 0.0);
-      BUF_SET(Sf, r, c, 2, row, col, 0.0);
-      BUF_SET(Sf, r, c, 3, row, col, 0.0);
+      for(int cnt = 0; cnt <= 3; ++cnt)
+        BUF_SET(Sf, r, c, cnt, row, col, nodata);
     }
   }
 }
@@ -172,21 +170,13 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
     for (int col = col_idx + 1; col < c - 1; col += col_stride) {
       m = GET(Sh, c, row, col) - p_epsilon;
       u[0] = GET(Sz, c, row, col) + p_epsilon;
-      z = GET(Sz, c, row + Xi[1], col + Xj[1]);
-      h = GET(Sh, c, row + Xi[1], col + Xj[1]);
-      u[1] = z + h;
-      z = GET(Sz, c, row + Xi[2], col + Xj[2]);
-      h = GET(Sh, c, row + Xi[2], col + Xj[2]);
-      u[2] = z + h;
-      z = GET(Sz, c, row + Xi[3], col + Xj[3]);
-      h = GET(Sh, c, row + Xi[3], col + Xj[3]);
-      u[3] = z + h;
-      z = GET(Sz, c, row + Xi[4], col + Xj[4]);
-      h = GET(Sh, c, row + Xi[4], col + Xj[4]);
-      u[4] = z + h;
+      for(int cnt = 1; cnt <= 4; ++cnt) {
+        z = GET(Sz, c, row + Xi[cnt], col + Xj[cnt]);
+        h = GET(Sh, c, row + Xi[cnt], col + Xj[cnt]);
+        u[cnt] = z + h;
+      }
 
-      do
-      {
+      do {
         again = false;
         average = m;
         cells_count = 0;
@@ -198,8 +188,7 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
             ++cells_count;
           }
 
-        if (cells_count != 0)
-          average /= cells_count;
+        if (cells_count != 0) average /= cells_count;
 
         for (n = 0; n < 5; ++n)
           if ((average <= u[n]) && (!eliminated_cells[n]))
@@ -209,10 +198,8 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
           }
       } while (again);
 
-      if (!eliminated_cells[1]) BUF_SET(Sf, r, c, 0, row, col, (average - u[1]) * p_r);
-      if (!eliminated_cells[2]) BUF_SET(Sf, r, c, 1, row, col, (average - u[2]) * p_r);
-      if (!eliminated_cells[3]) BUF_SET(Sf, r, c, 2, row, col, (average - u[3]) * p_r);
-      if (!eliminated_cells[4]) BUF_SET(Sf, r, c, 3, row, col, (average - u[4]) * p_r);
+      for(int cnt = 0; cnt <= 3; ++cnt)
+        if (!eliminated_cells[cnt+1]) BUF_SET(Sf, r, c, cnt, row, col, (average - u[cnt+1]) * p_r);
     }
   }
 }
@@ -229,10 +216,9 @@ __global__ void sciddicaTWidthUpdateKernel(int r, int c, double nodata, int* Xi,
   for (int row = row_idx + 1; row < r - 1; row += row_stride) {
     for (int col = col_idx + 1; col < c - 1; col += col_stride) {
       h_next = GET(Sh, c, row, col);
-      h_next += BUF_GET(Sf, r, c, 3, row+Xi[1], col+Xj[1]) - BUF_GET(Sf, r, c, 0, row, col);
-      h_next += BUF_GET(Sf, r, c, 2, row+Xi[2], col+Xj[2]) - BUF_GET(Sf, r, c, 1, row, col);
-      h_next += BUF_GET(Sf, r, c, 1, row+Xi[3], col+Xj[3]) - BUF_GET(Sf, r, c, 2, row, col);
-      h_next += BUF_GET(Sf, r, c, 0, row+Xi[4], col+Xj[4]) - BUF_GET(Sf, r, c, 3, row, col);
+      int top = 3;
+      for(int cnt = 0; cnt <= top; ++cnt)
+        h_next += BUF_GET(Sf, r, c, top - cnt, row+Xi[cnt+1], col+Xj[cnt+1]) - BUF_GET(Sf, r, c, cnt, row, col);
 
       SET(Sh, c, row, col, h_next);
     }
