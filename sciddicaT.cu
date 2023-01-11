@@ -31,7 +31,7 @@
 #define BUF_GET(M, rows, columns, n, i, j) ( M[( ((n)*(rows)*(columns)) + ((i)*(columns)) + (j) )] )
 
 // ----------------------------------------------------------------------------
-// I/O functions
+// I/O functions and memory management
 // ----------------------------------------------------------------------------
 void readHeaderInfo(char* path, int &nrows, int &ncols, double &nodata)
 {
@@ -106,6 +106,14 @@ double* addLayer2D(int rows, int columns)
   if (!tmp)
     return NULL;
   return tmp;
+}
+
+void freeMemory(double* Sz, double* Sh, double* Sf, int* Xi, int* Xj) {
+  checkError(cudaFree(Sz), __LINE__, "error deallocating memory for Sz");
+  checkError(cudaFree(Sh), __LINE__, "error deallocating memory for Sh");
+  checkError(cudaFree(Sf), __LINE__, "error deallocating memory for Sf");
+  checkError(cudaFree(Xi), __LINE__, "error deallocating memory for Xi");
+  checkError(cudaFree(Xj), __LINE__, "error deallocating memory for Xj");
 }
 
 // ----------------------------------------------------------------------------
@@ -236,8 +244,6 @@ int main(int argc, char **argv)
 
   int r = rows;                     // r: grid rows
   int c = cols;                     // c: grid columns
-  //int i_start = 1, i_end = r-1;   // [i_start,i_end[: kernel application range along rows
-  //int j_start = 1, j_end = c-1;   // [i_start,i_end[: kernel application range along columns
   double *Sz;                       // Sz: substate (grid) containing cells' altitude a.s.l.
   double *Sh;                       // Sh: substate (grid) containing cells' flow thickness
   double *Sf;                       // Sf: 4 substates containing the flows towards the 4 neighbors
@@ -323,11 +329,7 @@ int main(int argc, char **argv)
   saveGrid2Dr(Sh, r, c, argv[OUTPUT_PATH_ID]);
 
   //printf("Releasing memory...\n");
-  checkError(cudaFree(Sz), __LINE__, "error deallocating memory for Sz");
-  checkError(cudaFree(Sh), __LINE__, "error deallocating memory for Sh");
-  checkError(cudaFree(Sf), __LINE__, "error deallocating memory for Sf");
-  checkError(cudaFree(Xi), __LINE__, "error deallocating memory for Xi");
-  checkError(cudaFree(Xj), __LINE__, "error deallocating memory for Xj");
+  freeMemory(Sz, Sh, Sf, Xi, Xj);
 
   return 0;
 }
