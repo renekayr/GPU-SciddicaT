@@ -359,7 +359,7 @@ __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, i
         }
         else {  // try to get a L2 cache hit (best case, otherwise global memory in DRAM has to be accessed)
           h_next += BUF_GET(Sf, r, c, (MASK_WIDTH - cnt), n_index_y, n_index_x)
-                    - BUF_GET(Sf, r, c, tmp, row_idx, col_idx);
+                    - BUF_GET(Sf, r, c, cnt, row_idx, col_idx);
         }
       }
     }
