@@ -600,7 +600,7 @@ int main(int argc, char **argv)
       // checkError(__LINE__, "error executing sciddicaTFlowsComputationKernel");
       // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationKernel");
 
-      sciddicaTFlowsComputationCachingKernelVerified<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+      sciddicaTFlowsComputationKernelVerified<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
       checkError(__LINE__, "error executing sciddicaTFlowsComputationCachingKernel");
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationCachingKernel");
 
@@ -608,7 +608,7 @@ int main(int argc, char **argv)
       // checkError(__LINE__, "error executing sciddicaTWidthUpdateKernel");
       // checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateKernel");
 
-      sciddicaTWidthUpdateCachingKernelVerified<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+      sciddicaTWidthUpdateKernelVerified<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
       checkError(__LINE__, "error executing sciddicaTWidthUpdateCachingKernel");
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateCachingKernel");
     }
