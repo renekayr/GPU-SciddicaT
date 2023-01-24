@@ -427,7 +427,7 @@ int main(int argc, char **argv)
   // printf("Grid dimensions are %d, %d, %d\n", grid_size.x, grid_size.y, grid_size.z);
   // printf("Total grid threads are: %d\n", block_size.x * block_size.y * grid_size.x * grid_size.y);
 
-  dim3 tiled_block_size(TILE_WIDTH, TILE_WIDTH, 1);  // == TILED_BUFFER_SIZE
+  dim3 tiled_block_size(TILE_WIDTH, TILE_WIDTH, 1);
   dim3 tiled_grid_size(ceil(sqrt(n / (TILE_WIDTH * TILE_WIDTH))), ceil(sqrt(n / (TILE_WIDTH * TILE_WIDTH))), 1);
 
   printf("\n");
