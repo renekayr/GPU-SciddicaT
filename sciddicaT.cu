@@ -33,8 +33,6 @@
   // max_shared_memory = (mask_width + tile_width - 1)^2 * sizeof(datatype)
   // Else, an arbitrary or estimated amount that does not surpass the GPU's capacity is chosen
 #define TILE_WIDTH 30
-#define TILED_BLOCK_WIDTH (TILE_WIDTH + MASK_WIDTH - 1)
-#define TILED_BUFFER_SIZE (TILE_WIDTH * TILE_WIDTH)
 
 // ----------------------------------------------------------------------------
 // Read/Write access macros linearizing single/multy layer buffer 2D indices
@@ -233,8 +231,8 @@ __global__ void sciddicaTFlowsComputationKernel(int r, int c, double nodata, int
 
 __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double nodata, int* Xi, int* Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
 {
-  int col_idx = 1 + threadIdx.x + blockDim.x * blockIdx.x;
-  int row_idx = 1 + threadIdx.y + blockDim.y * blockIdx.y;
+  int col_idx = threadIdx.x + blockDim.x * blockIdx.x;
+  int row_idx = threadIdx.y + blockDim.y * blockIdx.y;
 
   bool eliminated_cells[5] = {false, false, false, false, false};
   bool again;
@@ -245,62 +243,65 @@ __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double noda
   int n;
   double z, h;
 
-  __shared__ double Sz_ds[TILED_BUFFER_SIZE];
-  __shared__ double Sh_ds[TILED_BUFFER_SIZE];
+  __shared__ double Sz_ds[TILE_WIDTH][TILE_WIDTH];
+  __shared__ double Sh_ds[TILE_WIDTH][TILE_WIDTH];
+
+  Sz_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sz, c, row_idx, col_idx);
+  Sh_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sh, c, row_idx, col_idx);
+  __syncthreads();
 
   int tile_start_x = blockIdx.x * blockDim.x;
   int next_tile_start_x = ((blockIdx.x + 1) * blockDim.x);
   int tile_start_y = blockIdx.y * blockDim.y;
   int next_tile_start_y = ((blockIdx.y + 1) * blockDim.y);
 
-  Sz_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sz, c, row_idx, col_idx);
-  Sh_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sh, c, row_idx, col_idx);
-  __syncthreads();
+  if (row_index > 0 && row_index < r - 1 && col_index > 0 && col_index < c - 1) {
+    m = Sh_ds[threadIdx.y][threadIdx.x] - p_epsilon;
+    u[0] = Sz_ds[threadIdx.y][threadIdx.x] + p_epsilon;
 
-  m = GET(Sh_ds, blockDim.x, threadIdx.y, threadIdx.x) - p_epsilon;
-  u[0] = GET(Sz_ds, blockDim.x, threadIdx.y, threadIdx.x) + p_epsilon;
-  for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
-    int n_index_x = col_idx - (MASK_WIDTH/2) + Xj[cnt + 1];
-    int n_index_y = row_idx - (MASK_WIDTH/2) + Xi[cnt + 1];
-    if((n_index_x >= 1) && (n_index_x < c - 1) && (n_index_y >= 1) && (n_index_y < r - 1)) {
-      if((n_index_x >= tile_start_x) && (n_index_x < next_tile_start_x) && (n_index_y >= tile_start_y) && (n_index_y < next_tile_start_y)) {
-        z = GET(Sz_ds, blockDim.x, threadIdx.y + Xi[cnt + 1], threadIdx.x + Xj[cnt + 1]);
-        h = GET(Sh_ds, blockDim.x, threadIdx.y + Xi[cnt + 1], threadIdx.x + Xj[cnt + 1]);
+    for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
+      int n_index_x = row_idx + Xi[cnt + 1];
+      int n_index_y = col_idx + Xj[cnt + 1];
+      if((n_index_x >= 0) && (n_index_x < c) && (n_index_y >= 0) && (n_index_y < r)) {
+        if((n_index_x >= tile_start_x) && (n_index_x < next_tile_start_x) && (n_index_y >= tile_start_y) && (n_index_y < next_tile_start_y)) {
+          z = Sz_ds[threadIdx.y + Xi[cnt + 1]][threadIdx.x + Xj[cnt + 1]];
+          h = Sh_ds[threadIdx.y + Xi[cnt + 1]][threadIdx.x + Xj[cnt + 1]];
+        }
+        else {  // try to get a L2 cache hit (best case, otherwise global memory in DRAM has to be accessed)
+          z = GET(Sz, c, n_index_y, n_index_x);
+          h = GET(Sh, c, n_index_y, n_index_x);
+        }
       }
-      else {  // try to get a L2 cache hit (best case, otherwise global memory in DRAM has to be accessed)
-        z = GET(Sz, c, n_index_y, n_index_x);
-        h = GET(Sh, c, n_index_y, n_index_x);
-      }
+      u[cnt + 1] = z + h;
     }
-    u[cnt + 1] = z + h;
-  }
 
-  do
-  {
-    again = false;
-    average = m;
-    cells_count = 0;
+    do
+    {
+      again = false;
+      average = m;
+      cells_count = 0;
 
-    for (n = 0; n < 5; ++n)
-      if (!eliminated_cells[n])
-      {
-        average += u[n];
-        ++cells_count;
-      }
+      for (n = 0; n < 5; ++n)
+        if (!eliminated_cells[n])
+        {
+          average += u[n];
+          ++cells_count;
+        }
 
-    if (cells_count != 0)
-      average /= cells_count;
+      if (cells_count != 0)
+        average /= cells_count;
 
-    for (n = 0; n < 5; ++n)
-      if ((average <= u[n]) && (!eliminated_cells[n]))
-      {
-        eliminated_cells[n] = true;
-        again = true;
-      }
-  } while (again);
+      for (n = 0; n < 5; ++n)
+        if ((average <= u[n]) && (!eliminated_cells[n]))
+        {
+          eliminated_cells[n] = true;
+          again = true;
+        }
+    } while (again);
 
-  for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
-    if (!eliminated_cells[cnt + 1]) BUF_SET(Sf, r, c, cnt, row_idx, col_idx, (average - u[cnt + 1]) * p_r);  // TODO check calculation results
+    for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
+      if (!eliminated_cells[cnt + 1]) BUF_SET(Sf, r, c, cnt, row_idx, col_idx, (average - u[cnt + 1]) * p_r);
+    }
   }
 }
 
@@ -333,10 +334,10 @@ __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, i
 
   double h_next;
   
-  __shared__ double Sf_ds[TILED_BUFFER_SIZE * ADJACENT_CELLS];
+  __shared__ double Sf_ds[TILE_WIDTH * ADJACENT_CELLS][TILE_WIDTH];
 
   for(int cnt = 0; cnt < 4; ++cnt) {
-    Sf_ds[threadIdx.x + threadIdx.y * blockDim.x] = BUF_GET(Sf, r, c, cnt, row_idx, col_idx);
+    Sf_ds[threadIdx.y + cnt * TILE_WIDTH][threadIdx.x] = BUF_GET(Sf, r, c, cnt, row_idx, col_idx);
   }
   __syncthreads();
 
@@ -345,24 +346,26 @@ __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, i
   int tile_start_y = blockIdx.y * blockDim.y;
   int next_tile_start_y = ((blockIdx.y + 1) * blockDim.y);
 
-  h_next = GET(Sh, c, row_idx, col_idx);
+  if(col_idx > 0 && col_idx < c - 1 && row_idx > 0 && row_idx < r - 1) {
+    h_next = GET(Sh, c, row_idx, col_idx);
 
-  for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
-    int n_index_x = col_idx - (MASK_WIDTH/2) + Xj[cnt + 1];
-    int n_index_y = row_idx - (MASK_WIDTH/2) + Xi[cnt + 1];
-    if((n_index_x >= 0) && (n_index_x < c) && (n_index_y >= 0) && (n_index_y < r)) {
-      if((n_index_x >= tile_start_x) && (n_index_x < next_tile_start_x) && (n_index_y >= tile_start_y) && (n_index_y < next_tile_start_y)) {
-        h_next += BUF_GET(Sf_ds, blockDim.y, blockDim.x, (MASK_WIDTH - cnt), threadIdx.y + Xi[cnt + 1], threadIdx.x + Xj[cnt + 1])
-                  - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y, threadIdx.x);
-      }
-      else {  // try to get a L2 cache hit (best case, otherwise global memory in DRAM has to be accessed)
-        h_next += BUF_GET(Sf, r, c, (MASK_WIDTH - cnt), n_index_y, n_index_x)
-                  - BUF_GET(Sf_ds, blockDim.y, blockDim.x, cnt, threadIdx.y, threadIdx.x);
+    for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
+      int n_index_x = col_idx + Xj[cnt + 1];
+      int n_index_y = row_idx + Xi[cnt + 1];
+      if((n_index_x >= 0) && (n_index_x < c) && (n_index_y >= 0) && (n_index_y < r)) {
+        if((n_index_x >= tile_start_x) && (n_index_x < next_tile_start_x) && (n_index_y >= tile_start_y) && (n_index_y < next_tile_start_y)) {
+          h_next += Sf_ds[threadIdx.y + Xi[cnt + 1] + (MASK_WIDTH - cnt) * TILE_WIDTH][threadIdx.x + Xj[cnt + 1]]
+                    - Sf_ds[threadIdx.y + cnt * TILE_WIDTH][threadIdx.x];
+        }
+        else {  // try to get a L2 cache hit (best case, otherwise global memory in DRAM has to be accessed)
+          h_next += BUF_GET(Sf, r, c, (MAX_MASK_WIDTH - tmp), n_index_y, n_index_x)
+                    - BUF_GET(Sf, r, c, tmp, row_idx, col_idx);
+        }
       }
     }
-  }
 
-  SET(Sh, c, row_idx, col_idx, h_next);
+    SET(Sh, c, row_idx, col_idx, h_next);
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -436,11 +439,8 @@ int main(int argc, char **argv)
   printf("Total blocks in tiled grid are: %d\n", tiled_grid_size.x * tiled_grid_size.y * tiled_grid_size.z);
   printf("Total tiled grid threads are: %d\n", tiled_block_size.x * tiled_block_size.y * tiled_block_size.z * tiled_grid_size.x * tiled_grid_size.y * tiled_grid_size.z);
   printf("Threads only involved in output: %d\n", TILE_WIDTH * TILE_WIDTH * tiled_grid_size.x * tiled_grid_size.y * tiled_grid_size.z);
-  printf("One double precision buffer requires %lld bytes of shared memory\n", TILED_BUFFER_SIZE * sizeof(double));
+  printf("One double precision buffer requires %lld bytes of shared memory\n", TILE_WIDTH * TILE_WIDTH * sizeof(double));
   printf("\n");
-
-  // TODO define optimal tile and by extension grid size individually depending on the kernel
-  //       calculate them beforehand by querying device maxima
 
   //printf("Initializing...\n");
   sciddicaTSimulationInitKernel<<<grid_size, block_size>>>(r, c, Sz, Sh);
