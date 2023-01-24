@@ -246,8 +246,8 @@ __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double noda
   __shared__ double Sz_ds[TILE_WIDTH][TILE_WIDTH];
   __shared__ double Sh_ds[TILE_WIDTH][TILE_WIDTH];
 
-  Sz_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sz, c, row_idx, col_idx);
-  Sh_ds[threadIdx.x + threadIdx.y * blockDim.x] = GET(Sh, c, row_idx, col_idx);
+  Sz_ds[threadIdx.y][threadIdx.x] = GET(Sz, c, row_idx, col_idx);
+  Sh_ds[threadIdx.y][threadIdx.x] = GET(Sh, c, row_idx, col_idx);
   __syncthreads();
 
   int tile_start_x = blockIdx.x * blockDim.x;
@@ -255,7 +255,7 @@ __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double noda
   int tile_start_y = blockIdx.y * blockDim.y;
   int next_tile_start_y = ((blockIdx.y + 1) * blockDim.y);
 
-  if (row_index > 0 && row_index < r - 1 && col_index > 0 && col_index < c - 1) {
+  if (row_idx > 0 && row_idx < r - 1 && col_idx > 0 && col_idx < c - 1) {
     m = Sh_ds[threadIdx.y][threadIdx.x] - p_epsilon;
     u[0] = Sz_ds[threadIdx.y][threadIdx.x] + p_epsilon;
 
@@ -358,7 +358,7 @@ __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, i
                     - Sf_ds[threadIdx.y + cnt * TILE_WIDTH][threadIdx.x];
         }
         else {  // try to get a L2 cache hit (best case, otherwise global memory in DRAM has to be accessed)
-          h_next += BUF_GET(Sf, r, c, (MAX_MASK_WIDTH - tmp), n_index_y, n_index_x)
+          h_next += BUF_GET(Sf, r, c, (MASK_WIDTH - cnt), n_index_y, n_index_x)
                     - BUF_GET(Sf, r, c, tmp, row_idx, col_idx);
         }
       }
