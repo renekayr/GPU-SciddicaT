@@ -33,6 +33,8 @@
   // max_shared_memory = (mask_width + tile_width - 1)^2 * sizeof(datatype)
   // Else, an arbitrary or estimated amount that does not surpass the GPU's capacity is chosen
 #define TILE_WIDTH 30
+#define TILE_WIDTH_FLOWSCOMPUTATION 30
+#define TILE_WIDTH_WIDTHUPDATE 30
 
 // ----------------------------------------------------------------------------
 // Read/Write access macros linearizing single/multy layer buffer 2D indices
@@ -172,6 +174,9 @@ __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double noda
   int tile_start_y = blockIdx.y * blockDim.y;
   int next_tile_start_y = ((blockIdx.y + 1) * blockDim.y);
 
+  __shared__ double Sz_ds[TILE_WIDTH_FLOWSCOMPUTATION][TILE_WIDTH_FLOWSCOMPUTATION];
+  __shared__ double Sh_ds[TILE_WIDTH_FLOWSCOMPUTATION][TILE_WIDTH_FLOWSCOMPUTATION];
+
   bool eliminated_cells[5] = {false, false, false, false, false};
   bool again;
   int cells_count;
@@ -180,9 +185,6 @@ __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double noda
   double u[5];
   int n;
   double z = 0, h = 0;
-
-  __shared__ double Sz_ds[TILE_WIDTH][TILE_WIDTH];
-  __shared__ double Sh_ds[TILE_WIDTH][TILE_WIDTH];
 
   Sz_ds[threadIdx.y][threadIdx.x] = GET(Sz, c, row_idx, col_idx);
   Sh_ds[threadIdx.y][threadIdx.x] = GET(Sh, c, row_idx, col_idx);
@@ -217,7 +219,7 @@ __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double noda
       for (n = 0; n < 5; ++n)
         if (!eliminated_cells[n]) {
           average += u[n];
-          cells_count++;
+          ++cells_count;
         }
 
       if (cells_count != 0)
@@ -246,35 +248,25 @@ __global__ void sciddicaTWidthUpdateCachingKernel(int r, int c, double nodata, i
   int tile_start_y = blockIdx.y * blockDim.y;
   int next_tile_start_y = ((blockIdx.y + 1) * blockDim.y);
 
-  __shared__ double Sf_ds[TILE_WIDTH * ADJACENT_CELLS][TILE_WIDTH];
+  __shared__ double Sf_ds[TILE_WIDTH_WIDTHUPDATE * ADJACENT_CELLS][TILE_WIDTH_WIDTHUPDATE];
 
-  for(int cnt = 0; cnt < 4; ++cnt) {
-    Sf_ds[threadIdx.y + cnt * TILE_WIDTH][threadIdx.x] = BUF_GET(Sf, r, c, cnt, row_idx, col_idx);
-  }
+  for(int cnt = 0; cnt < 4; ++cnt)
+    Sf_ds[threadIdx.y + cnt * TILE_WIDTH_WIDTHUPDATE][threadIdx.x] = BUF_GET(Sf, r, c, cnt, row_idx, col_idx);
   __syncthreads();
 
-
-  if (col_idx > 0 && col_idx < c - 1 && row_idx > 0 && row_idx < r - 1)
-  {
+  if (col_idx > 0 && col_idx < c - 1 && row_idx > 0 && row_idx < r - 1) {
     double h_next = GET(Sh, c, row_idx, col_idx);
 
-    for (int cnt = 0; cnt <= MASK_WIDTH; ++cnt)
-    {
+    for (int cnt = 0; cnt <= MASK_WIDTH; ++cnt) {
       int n_index_x = col_idx + Xj[cnt+1];
       int n_index_y = row_idx + Xi[cnt+1];
       if ((n_index_x >= 0) && (n_index_x < c) && (n_index_y >= 0) && (n_index_y < r))
-      {
         if ((n_index_x >= tile_start_x) && (n_index_x < next_tile_start_x) && (n_index_y >= tile_start_y) && (n_index_y < next_tile_start_y))
-        {
-          h_next += Sf_ds[threadIdx.y + Xi[cnt+1] + (MASK_WIDTH - cnt) * TILE_WIDTH][threadIdx.x + Xj[cnt+1]]
-                    - Sf_ds[threadIdx.y + cnt * TILE_WIDTH][threadIdx.x];
-        }
+          h_next += Sf_ds[threadIdx.y + Xi[cnt+1] + (MASK_WIDTH - cnt) * TILE_WIDTH_WIDTHUPDATE][threadIdx.x + Xj[cnt+1]]
+                    - Sf_ds[threadIdx.y + cnt * TILE_WIDTH_WIDTHUPDATE][threadIdx.x];
         else
-        {
           h_next += BUF_GET(Sf, r, c, (MASK_WIDTH - cnt), n_index_y, n_index_x)
                     - BUF_GET(Sf, r, c, cnt, row_idx, col_idx);
-        }
-      }
     }
     SET(Sh, c, row_idx, col_idx, h_next);
   }
@@ -291,8 +283,6 @@ int main(int argc, char **argv)
 
   int r = rows;                     // r: grid rows
   int c = cols;                     // c: grid columns
-  // int i_start = 1, i_end = r-1;   // [i_start,i_end[: kernel application range along rows
-  // int j_start = 1, j_end = c-1;   // [i_start,i_end[: kernel application range along columns
   double *Sz;                       // Sz: substate (grid) containing cells' altitude a.s.l.
   double *Sh;                       // Sh: substate (grid) containing cells' flow thickness
   double *Sf;                       // Sf: 4 substates containing the flows towards the 4 neighbors
@@ -312,7 +302,6 @@ int main(int argc, char **argv)
   //               |0:1:(-1, 0)|
   //   |1:2:( 0,-1)| :0:( 0, 0)|2:3:( 0, 1)|
   //               |3:4:( 1, 0)|
-  //
   //
 
   // printf("Allocating memory...\n");
@@ -334,24 +323,38 @@ int main(int argc, char **argv)
   dim3 block_size(dim_x, dim_y, 1);
   dim3 grid_size(ceil(sqrt(n / (dim_x * dim_y))), ceil(sqrt(n / (dim_x * dim_y))), 1);
 
-  // printf("Problem size is %d elements\n", n);
-  // printf("Block dimensions are %d, %d, %d\n", block_size.x, block_size.y, block_size.z);
-  // printf("Grid dimensions are %d, %d, %d\n", grid_size.x, grid_size.y, grid_size.z);
-  // printf("Total grid threads are: %d\n", block_size.x * block_size.y * grid_size.x * grid_size.y);
+  printf("\n");
+  printf("Problem size is %d elements\n", n);
+  printf("\n");
 
-  dim3 tiled_block_size(TILE_WIDTH, TILE_WIDTH, 1);
-  dim3 tiled_grid_size(ceil(sqrt(n / (TILE_WIDTH * TILE_WIDTH))), ceil(sqrt(n / (TILE_WIDTH * TILE_WIDTH))), 1);
+  dim3 tiled_block_size_flowscomputation(TILE_WIDTH_FLOWSCOMPUTATION, TILE_WIDTH_FLOWSCOMPUTATION, 1);
+  dim3 tiled_grid_size_flowscomputation(ceil(sqrt(n / (TILE_WIDTH_FLOWSCOMPUTATION * TILE_WIDTH_FLOWSCOMPUTATION))),
+                                        ceil(sqrt(n / (TILE_WIDTH_FLOWSCOMPUTATION * TILE_WIDTH_FLOWSCOMPUTATION))), 1);
 
   printf("\n");
-  printf("Mask width is %d\n", MASK_WIDTH);
-  printf("Tile width is %d\n", TILE_WIDTH);
-  printf("Problem size is %d elements\n", n);
-  printf("Tiled block dimensions are %d, %d, %d\n", tiled_block_size.x, tiled_block_size.y, tiled_block_size.z);
-  printf("Tiled grid dimensions are %d, %d, %d\n", tiled_grid_size.x, tiled_grid_size.y, tiled_grid_size.z);
-  printf("Total blocks in tiled grid are: %d\n", tiled_grid_size.x * tiled_grid_size.y * tiled_grid_size.z);
-  printf("Total tiled grid threads are: %d\n", tiled_block_size.x * tiled_block_size.y * tiled_block_size.z * tiled_grid_size.x * tiled_grid_size.y * tiled_grid_size.z);
-  printf("Threads only involved in output: %d\n", TILE_WIDTH * TILE_WIDTH * tiled_grid_size.x * tiled_grid_size.y * tiled_grid_size.z);
-  printf("One double precision buffer requires %lld bytes of shared memory\n", TILE_WIDTH * TILE_WIDTH * sizeof(double));
+  printf("*---------- FlowsComputation ----------\n");
+  printf("Tile width is %d\n", TILE_WIDTH_FLOWSCOMPUTATION);
+  printf("Tiled block dimensions are %d, %d, %d\n", tiled_block_size_flowscomputation.x, tiled_block_size_flowscomputation.y, tiled_block_size_flowscomputation.z);
+  printf("Tiled grid dimensions are %d, %d, %d\n", tiled_grid_size_flowscomputation.x, tiled_grid_size_flowscomputation.y, tiled_grid_size_flowscomputation.z);
+  printf("Total blocks in tiled grid are: %d\n", tiled_grid_size_flowscomputation.x * tiled_grid_size_flowscomputation.y * tiled_grid_size_flowscomputation.z);
+  printf("Total tiled grid threads are: %d\n", tiled_block_size_flowscomputation.x * tiled_block_size_flowscomputation.y * tiled_block_size_flowscomputation.z * tiled_grid_size_flowscomputation.x * tiled_grid_size_flowscomputation.y * tiled_grid_size_flowscomputation.z);
+  printf("Threads only involved in output: %d\n", TILE_WIDTH_FLOWSCOMPUTATION * TILE_WIDTH_FLOWSCOMPUTATION * tiled_grid_size_flowscomputation.x * tiled_grid_size_flowscomputation.y * tiled_grid_size_flowscomputation.z);
+  printf("One double precision buffer requires %lld bytes of shared memory\n", TILED_BUFFER_SIZE_FLOWSCOMPUTATION * sizeof(double));
+  printf("\n");
+
+  dim3 tiled_block_size_widthupdate(TILE_WIDTH_WIDTHUPDATE, TILE_WIDTH_WIDTHUPDATE, 1);
+  dim3 tiled_grid_size_widthupdate(ceil(sqrt(n / (TILE_WIDTH_WIDTHUPDATE * TILE_WIDTH_WIDTHUPDATE))),
+                                        ceil(sqrt(n / (TILE_WIDTH_WIDTHUPDATE * TILE_WIDTH_WIDTHUPDATE))), 1);
+
+  printf("\n");
+  printf("*---------- WidthUpdate ----------\n");
+  printf("Tile width is %d\n", TILE_WIDTH_WIDTHUPDATE);
+  printf("Tiled block dimensions are %d, %d, %d\n", tiled_block_size_widthupdate.x, tiled_block_size_widthupdate.y, tiled_block_size_widthupdate.z);
+  printf("Tiled grid dimensions are %d, %d, %d\n", tiled_grid_size_widthupdate.x, tiled_grid_size_widthupdate.y, tiled_grid_size_widthupdate.z);
+  printf("Total blocks in tiled grid are: %d\n", tiled_grid_size_widthupdate.x * tiled_grid_size_widthupdate.y * tiled_grid_size_widthupdate.z);
+  printf("Total tiled grid threads are: %d\n", tiled_block_size_widthupdate.x * tiled_block_size_widthupdate.y * tiled_block_size_widthupdate.z * tiled_grid_size_widthupdate.x * tiled_grid_size_widthupdate.y * tiled_grid_size_widthupdate.z);
+  printf("Threads only involved in output: %d\n", TILE_WIDTH_WIDTHUPDATE * TILE_WIDTH_WIDTHUPDATE * tiled_grid_size_widthupdate.x * tiled_grid_size_widthupdate.y * tiled_grid_size_widthupdate.z);
+  printf("One double precision buffer requires %lld bytes of shared memory\n", TILED_BUFFER_SIZE_WIDTHUPDATE * sizeof(double));
   printf("\n");
 
   //printf("Initializing...\n");
@@ -372,11 +375,11 @@ int main(int argc, char **argv)
       checkError(__LINE__, "error executing sciddicaTSimulationInitKernel");
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTResetFlowsKernel");
 
-      sciddicaTFlowsComputationCachingKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
+      sciddicaTFlowsComputationCachingKernel<<<tiled_grid_size_flowscomputation, tiled_block_size_flowscomputation>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf, p_r, p_epsilon);
       checkError(__LINE__, "error executing sciddicaTFlowsComputationCachingKernel");
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTFlowsComputationCachingKernel");
 
-      sciddicaTWidthUpdateCachingKernel<<<tiled_grid_size, tiled_block_size>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
+      sciddicaTWidthUpdateCachingKernel<<<tiled_grid_size_widthupdate, tiled_block_size_widthupdate>>>(r, c, nodata, Xi, Xj, Sz, Sh, Sf);
       checkError(__LINE__, "error executing sciddicaTWidthUpdateCachingKernel");
       checkError(cudaDeviceSynchronize(), __LINE__, "error syncing after sciddicaTWidthUpdateCachingKernel");
     }
