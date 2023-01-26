@@ -32,9 +32,8 @@
   // This formula is derived by solving the following equation for for tile_width:
   // max_shared_memory = (mask_width + tile_width - 1)^2 * sizeof(datatype)
   // Else, an arbitrary or estimated amount that does not surpass the GPU's capacity is chosen
-#define TILE_WIDTH 30
-#define TILE_WIDTH_FLOWSCOMPUTATION 30
-#define TILE_WIDTH_WIDTHUPDATE 30
+#define TILE_WIDTH_FLOWSCOMPUTATION 27
+#define TILE_WIDTH_WIDTHUPDATE 32
 
 // ----------------------------------------------------------------------------
 // Read/Write access macros linearizing single/multy layer buffer 2D indices
@@ -134,7 +133,7 @@ __global__ void sciddicaTSimulationInitKernel(int r, int c, double *Sz, double *
 
   double z, h;
 
-  for (int row = row_idx + 1; row < r - 1; row += row_stride) {
+  for (int row = row_idx + 1; row < r - 1; row += row_stride)
     for (int col = col_idx + 1; col < c - 1; col += col_stride) {
       h = GET(Sh, c, row, col);
 
@@ -143,7 +142,6 @@ __global__ void sciddicaTSimulationInitKernel(int r, int c, double *Sz, double *
         SET(Sz, c, row, col, z - h);
       }
     }
-  }
 }
 
 // ----------------------------------------------------------------------------
@@ -156,12 +154,10 @@ __global__ void sciddicaTResetFlowsKernel(int r, int c, double nodata, double* S
   int col_stride = blockDim.x * gridDim.x;
   int row_stride = blockDim.y * gridDim.y;
 
-  for (int row = row_idx + 1; row < r - 1; row += row_stride) {
-    for (int col = col_idx + 1; col < c - 1; col += col_stride) {
+  for (int row = row_idx + 1; row < r - 1; row += row_stride)
+    for (int col = col_idx + 1; col < c - 1; col += col_stride)
       for(int cnt = 0; cnt <= MASK_WIDTH; ++cnt)
         BUF_SET(Sf, r, c, cnt, row, col, nodata);
-    }
-  }
 }
 
 __global__ void sciddicaTFlowsComputationCachingKernel(int r, int c, double nodata, int *Xi, int *Xj, double *Sz, double *Sh, double *Sf, double p_r, double p_epsilon)
@@ -332,7 +328,7 @@ int main(int argc, char **argv)
                                         ceil(sqrt(n / (TILE_WIDTH_FLOWSCOMPUTATION * TILE_WIDTH_FLOWSCOMPUTATION))), 1);
 
   printf("\n");
-  printf("*---------- FlowsComputation ----------\n");
+  printf("*---------- FlowsComputation ----------*\n");
   printf("Tile width is %d\n", TILE_WIDTH_FLOWSCOMPUTATION);
   printf("Tiled block dimensions are %d, %d, %d\n", tiled_block_size_flowscomputation.x, tiled_block_size_flowscomputation.y, tiled_block_size_flowscomputation.z);
   printf("Tiled grid dimensions are %d, %d, %d\n", tiled_grid_size_flowscomputation.x, tiled_grid_size_flowscomputation.y, tiled_grid_size_flowscomputation.z);
@@ -347,7 +343,7 @@ int main(int argc, char **argv)
                                         ceil(sqrt(n / (TILE_WIDTH_WIDTHUPDATE * TILE_WIDTH_WIDTHUPDATE))), 1);
 
   printf("\n");
-  printf("*---------- WidthUpdate ----------\n");
+  printf("*---------- WidthUpdate ----------*\n");
   printf("Tile width is %d\n", TILE_WIDTH_WIDTHUPDATE);
   printf("Tiled block dimensions are %d, %d, %d\n", tiled_block_size_widthupdate.x, tiled_block_size_widthupdate.y, tiled_block_size_widthupdate.z);
   printf("Tiled grid dimensions are %d, %d, %d\n", tiled_grid_size_widthupdate.x, tiled_grid_size_widthupdate.y, tiled_grid_size_widthupdate.z);
