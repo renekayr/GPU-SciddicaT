@@ -339,7 +339,7 @@ int main(int argc, char **argv)
   printf("Total blocks in tiled grid are: %d\n", tiled_grid_size_flowscomputation.x * tiled_grid_size_flowscomputation.y * tiled_grid_size_flowscomputation.z);
   printf("Total tiled grid threads are: %d\n", tiled_block_size_flowscomputation.x * tiled_block_size_flowscomputation.y * tiled_block_size_flowscomputation.z * tiled_grid_size_flowscomputation.x * tiled_grid_size_flowscomputation.y * tiled_grid_size_flowscomputation.z);
   printf("Threads only involved in output: %d\n", TILE_WIDTH_FLOWSCOMPUTATION * TILE_WIDTH_FLOWSCOMPUTATION * tiled_grid_size_flowscomputation.x * tiled_grid_size_flowscomputation.y * tiled_grid_size_flowscomputation.z);
-  printf("One double precision buffer requires %lld bytes of shared memory\n", TILED_BUFFER_SIZE_FLOWSCOMPUTATION * sizeof(double));
+  printf("One double precision buffer requires %lld bytes of shared memory\n", TILE_WIDTH_FLOWSCOMPUTATION * TILE_WIDTH_FLOWSCOMPUTATION * sizeof(double));
   printf("\n");
 
   dim3 tiled_block_size_widthupdate(TILE_WIDTH_WIDTHUPDATE, TILE_WIDTH_WIDTHUPDATE, 1);
@@ -354,7 +354,7 @@ int main(int argc, char **argv)
   printf("Total blocks in tiled grid are: %d\n", tiled_grid_size_widthupdate.x * tiled_grid_size_widthupdate.y * tiled_grid_size_widthupdate.z);
   printf("Total tiled grid threads are: %d\n", tiled_block_size_widthupdate.x * tiled_block_size_widthupdate.y * tiled_block_size_widthupdate.z * tiled_grid_size_widthupdate.x * tiled_grid_size_widthupdate.y * tiled_grid_size_widthupdate.z);
   printf("Threads only involved in output: %d\n", TILE_WIDTH_WIDTHUPDATE * TILE_WIDTH_WIDTHUPDATE * tiled_grid_size_widthupdate.x * tiled_grid_size_widthupdate.y * tiled_grid_size_widthupdate.z);
-  printf("One double precision buffer requires %lld bytes of shared memory\n", TILED_BUFFER_SIZE_WIDTHUPDATE * sizeof(double));
+  printf("One double precision buffer requires %lld bytes of shared memory\n", TILE_WIDTH_WIDTHUPDATE * TILE_WIDTH_WIDTHUPDATE * sizeof(double));
   printf("\n");
 
   //printf("Initializing...\n");
